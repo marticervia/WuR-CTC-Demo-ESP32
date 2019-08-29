@@ -82,7 +82,7 @@ void wur_init(uint16_t addr){
     xSemaphoreGive(wur_semaphore);
 
     wur_mutex = xSemaphoreCreateRecursiveMutex();
-    xSemaphoreGiveRecursive(wur_semaphore);
+    xSemaphoreGiveRecursive(wur_mutex);
 
 
 	ook_wur_init();
