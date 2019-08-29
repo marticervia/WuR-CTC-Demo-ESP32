@@ -1,4 +1,5 @@
 #include <string.h>
+#include <esp_http_server.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -30,71 +31,87 @@
 static app_ctxt_t app_ctxt;
 static SemaphoreHandle_t app_mutex;
 static SemaphoreHandle_t app_semaphore;
+static SemaphoreHandle_t http_semaphore;
 
 /* wur related handlers */
-
-//TODO: USE_ESP32_SDK EQUIVALENT for HTTP
-/*
-void WuRWakeDevice(EmberCoapCode code,
-                     uint8_t *uri,
-                     EmberCoapReadOptions *options,
-                     const uint8_t *payload,
-                     uint16_t payloadLength,
-                     const EmberCoapRequestInfo *info){
+esp_err_t WuRWakeDevice(httpd_req_t *req){
 
     uint32_t current_timestamp = get_timestamp_ms();
     printf("[%d]: Got Wake Device REQ!", current_timestamp);
+    char content[100];
+    char resp[256];
 
     if(app_ctxt.app_status != APP_IDLE){
-        printf("[%d]: Refusing Wake Device REQ, already busy!", current_timestamp);
-        emberCoapRespondWithCode(info, EMBER_COAP_CODE_412_PRECONDITION_FAILED);
-        return;
+        sprintf(resp, "[%d]: Refusing Wake Device REQ, already busy!", current_timestamp);
+        printf("%s\n", resp);
+        httpd_resp_set_status(req, "412 Precondition Failed");
+        httpd_resp_send(req, resp, strlen(resp));
+        return ESP_OK;
     }
+
+    int payloadLength = httpd_req_recv(req, content, sizeof(content));
 
     if((payloadLength > MAX_APP_DATA_BUF) || (payloadLength < MIN_WAKE_REQ_LEN)){
-        printf("[%d]: Payload of %d bytes disallowed for WAKE!", current_timestamp, payloadLength);
-        emberCoapRespondWithCode(info, EMBER_COAP_CODE_400_BAD_REQUEST);
-        return;
+        sprintf(resp, "[%d]: Payload of %d bytes disallowed for WAKE!", current_timestamp, payloadLength);
+        printf("%s\n", resp);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, resp, strlen(resp));
+        return ESP_OK;
     }
 
-    memcpy(app_ctxt.app_data_buf, payload, payloadLength);
+    memcpy(app_ctxt.app_data_buf, content, payloadLength);
     app_ctxt.app_data_buf_len = payloadLength;
-
-    emberSaveRequestInfo(info, &(app_ctxt.app_request_info));
     app_ctxt.app_status = APP_SENDING_WAKE;
-}
-*/
 
-//TODO: USE_ESP32_SDK EQUIVALENT for HTTP
-/*
-void WuRRequestDevice(EmberCoapCode code,
-                         uint8_t *uri,
-                         EmberCoapReadOptions *options,
-                         const uint8_t *payload,
-                         uint16_t payloadLength,
-                         const EmberCoapRequestInfo *info){
+    if(xSemaphoreTake(http_semaphore, HTTP_TIMEOUT/portTICK_PERIOD_MS) == pdTRUE){
+        if(app_ctxt.app_response_code != 200){
+            httpd_resp_set_status(req, "500 Internal Server Error");
+        }
+        httpd_resp_send(req, (char*)app_ctxt.app_data_buf, app_ctxt.app_data_buf_len);
+    }else{
+        httpd_resp_send_408(req);
+    }
+    return ESP_OK;
+}
+
+esp_err_t WuRRequestDevice(httpd_req_t *req){
     uint32_t current_timestamp = get_timestamp_ms();
     printf("[%d]: Got Data Device REQ!", current_timestamp);
+    char content[100];
+    char resp[256];
 
     if(app_ctxt.app_status != APP_IDLE){
-        printf("[%d]: Refusing DATA to Device REQ, already busy!", current_timestamp);
-        emberCoapRespondWithCode(info, EMBER_COAP_CODE_412_PRECONDITION_FAILED);
-        return;
+        sprintf(resp, "[%d]: Refusing DATA to Device REQ, already busy!", current_timestamp);
+        printf("%s\n", resp);
+        httpd_resp_set_status(req, "412 Precondition Failed");
+        httpd_resp_send(req, resp, strlen(resp));
+        return ESP_OK;
     }
+
+    int payloadLength = httpd_req_recv(req, content, sizeof(content));
 
     if((payloadLength > MAX_APP_DATA_BUF) || (payloadLength < MIN_DATA_REQ_LEN)){
-        printf("[%d]: Payload of %d bytes disallowed for DATA!", current_timestamp, payloadLength);
-        emberCoapRespondWithCode(info, EMBER_COAP_CODE_400_BAD_REQUEST);
-        return;
+        sprintf(resp, "[%d]: Payload of %d bytes disallowed for DATA!", current_timestamp, payloadLength);
+        printf("%s\n", resp);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, resp, strlen(resp));
+        return ESP_OK;
     }
 
-    memcpy(app_ctxt.app_data_buf, payload, payloadLength);
+    memcpy(app_ctxt.app_data_buf, content, payloadLength);
     app_ctxt.app_data_buf_len = payloadLength;
-
-    emberSaveRequestInfo(info, &(app_ctxt.app_request_info));
     app_ctxt.app_status = APP_SENDING_DATA;
+
+    if(xSemaphoreTake(http_semaphore, HTTP_TIMEOUT/portTICK_PERIOD_MS) == pdTRUE){
+        if(app_ctxt.app_response_code != 200){
+            httpd_resp_set_status(req, "500 Internal Server Error");
+        }
+        httpd_resp_send(req, (char*)app_ctxt.app_data_buf, app_ctxt.app_data_buf_len);
+    }else{
+        httpd_resp_send_408(req);
+    }
+    return ESP_OK;
 }
-*/
 
 
 static inline uint16_t _getuint16t(uint8_t* buff){
@@ -112,25 +129,16 @@ static inline void _setint16t(uint8_t* buff, int16_t num){
 static void _respondWithError(app_trans_result_t res){
     const uint8_t res_payload[2] = {0};
     _setint16t((uint8_t*) res_payload, res);
-    //TODO: USE_ESP32_SDK EQUIVALENT
-    /*
-     emberCoapRespondWithPayload(&app_ctxt.app_request_info, EMBER_COAP_CODE_500_INTERNAL_SERVER_ERROR,
-            res_payload, 2);
-    */
+    app_ctxt.app_response_code = 500;
+    xSemaphoreGive(app_semaphore);
 }
 
 static void _respondWithPayload(uint8_t* payload, uint8_t payload_len){
-    if(payload_len > 0){
-        //TODO: USE_ESP32_SDK EQUIVALENT
-        /*
-         emberCoapRespondWithPayload(&app_ctxt.app_request_info, EMBER_COAP_CODE_203_VALID,
-                 &payload[WUR_PAYLOAD_OFFSET], payload_len - WUR_PAYLOAD_OFFSET);
-        */
-    }
-    //TODO: USE_ESP32_SDK EQUIVALENT
-    /*
-    emberCoapRespondWithCode(&app_ctxt.app_request_info, EMBER_COAP_CODE_203_VALID);
-    */
+
+    memcpy(app_ctxt.app_data_buf, payload, payload_len);
+    app_ctxt.app_data_buf_len = payload_len;
+    app_ctxt.app_response_code = 200;
+    xSemaphoreGive(app_semaphore);
 }
 
 
@@ -203,13 +211,26 @@ static void _wur_rx_cb(wur_rx_res_t rx_res, uint8_t* rx_bytes, uint8_t rx_bytes_
 }
 
 
+/* URI handler structure for GET /uri */
+httpd_uri_t uri_wake = {
+    .uri      = "/wur/wake",
+    .method   = HTTP_POST,
+    .handler  = WuRWakeDevice,
+    .user_ctx = NULL
+};
+
+/* URI handler structure for POST /uri */
+httpd_uri_t uri_data = {
+    .uri      = "/wur/data",
+    .method   = HTTP_POST,
+    .handler  = WuRRequestDevice,
+    .user_ctx = NULL
+};
+
+
 void WuRInitApp(void){
     wur_init(WUR_ADDR);
 
-    //TODO: USE_ESP32_SDK EQUIVALENT
-    /*
-    memset(&app_ctxt.app_request_info, 0, sizeof(EmberCoapRequestInfo));
-    */
     app_ctxt.app_status = APP_IDLE;
     memset(app_ctxt.app_data_buf, 0, MAX_APP_DATA_BUF);
     app_ctxt.app_data_buf_len = 0;
@@ -218,8 +239,21 @@ void WuRInitApp(void){
 
     app_mutex = xSemaphoreCreateRecursiveMutex();
     xSemaphoreGiveRecursive(app_mutex);
-
     app_semaphore = xSemaphoreCreateBinary();
+    http_semaphore = xSemaphoreCreateBinary();
+
+    /* Generate default configuration */
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+
+    /* Empty handle to esp_http_server */
+    httpd_handle_t server = NULL;
+
+    /* Start the httpd server */
+    if (httpd_start(&server, &config) == ESP_OK) {
+        /* Register URI handlers */
+        httpd_register_uri_handler(server, &uri_wake);
+        httpd_register_uri_handler(server, &uri_data);
+    }
 }
 
 void WuRAppTick(void){

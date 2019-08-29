@@ -13,7 +13,7 @@
 
 #define ADDR_OFFSET 0
 #define PAYLOAD_OFFSET 2
-
+#define HTTP_TIMEOUT 30000
 //Addr plus ms awake
 #define MIN_WAKE_REQ_LEN 4
 
@@ -46,24 +46,13 @@ typedef struct app_ctxt{
 	app_status_t 		 app_status;
 	uint8_t 		 	 app_data_buf[MAX_APP_DATA_BUF];
 	uint8_t 		 	 app_data_buf_len;
+	int16_t 			 app_response_code;
 }app_ctxt_t;
 
-//TODO: Use ESP_32 Native
-/*
-void WuRWakeDevice(EmberCoapCode code,
-                                         uint8_t *uri,
-                                         EmberCoapReadOptions *options,
-                                         const uint8_t *payload,
-                                         uint16_t payloadLength,
-                                         const EmberCoapRequestInfo *info);
 
-void WuRRequestDevice (EmberCoapCode code,
-                                         uint8_t *uri,
-                                         EmberCoapReadOptions *options,
-                                         const uint8_t *payload,
-                                         uint16_t payloadLength,
-                                         const EmberCoapRequestInfo *info);
-*/
+esp_err_t WuRWakeDevice(httpd_req_t *req);
+esp_err_t WuRRequestDevice (httpd_req_t *req);
+
 void WuRSystemTick(uint32_t timestamp);
 
 #endif /* WUR_IMPLEMENTATION_H_ */
