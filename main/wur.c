@@ -54,7 +54,7 @@ static IRAM_ATTR void wur_int_handler(void* arg)
 }
 
 static void wur_tick_task(void* args){
-
+	printf("Wur Tick task started!");
 	while(1){
 		uint32_t tick = get_timestamp_ms();
 		wur_tick(tick);
@@ -152,6 +152,7 @@ void wur_tick(uint32_t systick){
 	}
 
 	if(!wur_op_pending){
+		printf("WuR Idle timeout!\n");
 		goto exit;
 	}
 

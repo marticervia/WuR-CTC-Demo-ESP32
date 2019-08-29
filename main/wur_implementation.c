@@ -27,17 +27,64 @@
 #include "ook_wur.h"
 #include "utils.h"
 #include "wur_implementation.h"
+#include "index.h"
+
+#define TAG "APP"
+#define ESP_WIFI_SSID      "MKSA"
+#define ESP_WIFI_PASS      "joan65629joan"
 
 static app_ctxt_t app_ctxt;
 static SemaphoreHandle_t app_mutex;
 static SemaphoreHandle_t app_semaphore;
 static SemaphoreHandle_t http_semaphore;
+static EventGroupHandle_t s_wifi_event_group;
+const int WIFI_CONNECTED_BIT = BIT0;
+static uint8_t bssid[6] = {0};
+
+static esp_err_t event_handler(void *ctx, system_event_t *event)
+{
+    switch(event->event_id) {
+    case SYSTEM_EVENT_STA_START:
+        esp_wifi_connect();
+        break;
+    case SYSTEM_EVENT_STA_CONNECTED:
+        /* enable ipv6 */
+        tcpip_adapter_create_ip6_linklocal(TCPIP_ADAPTER_IF_STA);
+        memcpy(bssid, event->event_info.connected.bssid, 6);
+        break;
+
+    case SYSTEM_EVENT_STA_GOT_IP:
+        ESP_LOGI(TAG, "got ip:%s",
+                 ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
+        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        break;
+    case SYSTEM_EVENT_STA_DISCONNECTED:
+        {
+            esp_wifi_connect();
+            xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+            ESP_LOGI(TAG,"connect to the AP fail\n");
+            break;
+        }
+    default:
+        break;
+    }
+    return ESP_OK;
+}
+
+esp_err_t WuRServeIndex(httpd_req_t *req){
+    esp_err_t res;
+    ESP_LOGI(TAG,"Received /index.html request");
+    size_t size = strlen(MAIN_page);
+    res = httpd_resp_send(req, MAIN_page, size);
+    ESP_LOGI(TAG,"Sent response with size %d with code %d", size, res);
+    return ESP_OK;
+}
 
 /* wur related handlers */
 esp_err_t WuRWakeDevice(httpd_req_t *req){
-
+    ESP_LOGI(TAG,"Received /wur/wake request");
     uint32_t current_timestamp = get_timestamp_ms();
-    printf("[%d]: Got Wake Device REQ!", current_timestamp);
+    printf("[%d]: Got Wake Device REQ!\n", current_timestamp);
     char content[100];
     char resp[256];
 
@@ -75,13 +122,14 @@ esp_err_t WuRWakeDevice(httpd_req_t *req){
 }
 
 esp_err_t WuRRequestDevice(httpd_req_t *req){
+    ESP_LOGI(TAG,"Received /wur/data request");
     uint32_t current_timestamp = get_timestamp_ms();
-    printf("[%d]: Got Data Device REQ!", current_timestamp);
+    printf("[%d]: Got Data Device REQ!\n", current_timestamp);
     char content[100];
     char resp[256];
 
     if(app_ctxt.app_status != APP_IDLE){
-        sprintf(resp, "[%d]: Refusing DATA to Device REQ, already busy!", current_timestamp);
+        sprintf(resp, "[%d]: Refusing DATA to Device REQ, already busy!\n", current_timestamp);
         printf("%s\n", resp);
         httpd_resp_set_status(req, "412 Precondition Failed");
         httpd_resp_send(req, resp, strlen(resp));
@@ -91,7 +139,7 @@ esp_err_t WuRRequestDevice(httpd_req_t *req){
     int payloadLength = httpd_req_recv(req, content, sizeof(content));
 
     if((payloadLength > MAX_APP_DATA_BUF) || (payloadLength < MIN_DATA_REQ_LEN)){
-        sprintf(resp, "[%d]: Payload of %d bytes disallowed for DATA!", current_timestamp, payloadLength);
+        sprintf(resp, "[%d]: Payload of %d bytes disallowed for DATA!\n", current_timestamp, payloadLength);
         printf("%s\n", resp);
         httpd_resp_set_status(req, "400 Bad Request");
         httpd_resp_send(req, resp, strlen(resp));
@@ -144,12 +192,12 @@ static void _respondWithPayload(uint8_t* payload, uint8_t payload_len){
 
 static void _printBuffer(uint8_t* res, uint8_t res_length){
     uint16_t i;
-    printf("Buffer is:");
+    printf("Buffer is:\n");
 
     for(i=0; i < (res_length -1); i++){
         printf("%01X:", res[i]);
     }
-    printf("%01X", res[i]);
+    printf("%01X\n", res[i]);
 }
 
 static void _wur_tx_cb(wur_tx_res_t tx_res){
@@ -161,12 +209,12 @@ static void _wur_tx_cb(wur_tx_res_t tx_res){
         case APP_WAITING_DATA:
             if(tx_res == WUR_ERROR_TX_OK){
                 if(app_ctxt.app_status == APP_WAITING_WAKE){
-                    printf("[%d]: Going to respond to Wake!", current_timestamp);
+                    printf("[%d]: Going to respond to Wake!\n", current_timestamp);
                     app_ctxt.app_status = APP_RESPONDING_WAKE;
 
                 }
                 else{
-                    printf("[%d]: Going to respond to Data!", current_timestamp);
+                    printf("[%d]: Going to respond to Data!\n", current_timestamp);
                     app_ctxt.app_status = APP_RESPONDING_DATA;
                 }
                 memset(app_ctxt.app_data_buf, 0, MAX_APP_DATA_BUF);
@@ -174,18 +222,18 @@ static void _wur_tx_cb(wur_tx_res_t tx_res){
             }
             else if((tx_res ==  WUR_ERROR_TX_ACK_DATA_TIMEOUT)
                     || (tx_res ==  WUR_ERROR_TX_ACK_WAKE_TIMEOUT)){
-                printf("[%d]: Received Timeout, going to idle!", current_timestamp);
+                printf("[%d]: Received Timeout, going to idle!\n", current_timestamp);
                 app_ctxt.app_status = APP_IDLE;
                 _respondWithError(APP_TRANS_KO_TIMEOUT);
             }
             else{
-                printf("[%d]: Received Error, going to idle!", current_timestamp);
+                printf("[%d]: Received Error, going to idle!\n", current_timestamp);
                 app_ctxt.app_status = APP_IDLE;
                 _respondWithError(APP_TRANS_KO_TIMEOUT);
             }
             break;
         default:
-            printf("[%d]: Received ACK while not waiting. Is this an error?!", current_timestamp);
+            printf("[%d]: Received ACK while not waiting. Is this an error?!\n", current_timestamp);
             break;
     }
     xSemaphoreGiveRecursive(app_mutex);
@@ -196,10 +244,11 @@ static void _wur_tx_cb(wur_tx_res_t tx_res){
 static void _wur_rx_cb(wur_rx_res_t rx_res, uint8_t* rx_bytes, uint8_t rx_bytes_len){
     uint32_t current_timestamp = get_timestamp_ms();
 
-    printf("[%d]: Received response with status %d!", current_timestamp, rx_res);
+    printf("[%d]: Received response with status %d!\n", current_timestamp, rx_res);
     _printBuffer(rx_bytes, rx_bytes_len);
     if(rx_bytes_len > MAX_APP_DATA_BUF){
-        printf("[%d]: Received response above max frame size %d!", current_timestamp, rx_bytes_len);
+        printf("[%d]: Received response above max frame size %d!\n", current_timestamp, rx_bytes_len);
+        return;
     }
 
     xSemaphoreTakeRecursive(app_mutex, portMAX_DELAY);
@@ -210,6 +259,13 @@ static void _wur_rx_cb(wur_rx_res_t rx_res, uint8_t* rx_bytes, uint8_t rx_bytes_
     xSemaphoreGive(app_semaphore);
 }
 
+
+httpd_uri_t uri_page = {
+    .uri      = "/index.html",
+    .method   = HTTP_GET,
+    .handler  = WuRServeIndex,
+    .user_ctx = NULL
+};
 
 /* URI handler structure for GET /uri */
 httpd_uri_t uri_wake = {
@@ -230,6 +286,31 @@ httpd_uri_t uri_data = {
 
 void WuRInitApp(void){
     wur_init(WUR_ADDR);
+
+    s_wifi_event_group = xEventGroupCreate();
+    nvs_flash_init();
+    tcpip_adapter_init();
+    ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL) );
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    wifi_config_t wifi_config = {
+        .sta = {
+            .ssid = ESP_WIFI_SSID,
+            .password = ESP_WIFI_PASS
+        },
+    };
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
+    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
+    ESP_ERROR_CHECK(esp_wifi_start() );
+
+    ESP_LOGI(TAG, "wifi_init_sta finished.");
+    ESP_LOGI(TAG, "connect to ap SSID:%s password:%s",
+             ESP_WIFI_SSID, ESP_WIFI_PASS);
+    ESP_LOGI(TAG, "Waiting for AP connection...");
+    xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
+    ESP_LOGI(TAG, "Connected to AP");
 
     app_ctxt.app_status = APP_IDLE;
     memset(app_ctxt.app_data_buf, 0, MAX_APP_DATA_BUF);
@@ -253,6 +334,7 @@ void WuRInitApp(void){
         /* Register URI handlers */
         httpd_register_uri_handler(server, &uri_wake);
         httpd_register_uri_handler(server, &uri_data);
+        httpd_register_uri_handler(server, &uri_page);
     }
 }
 
@@ -268,28 +350,28 @@ void WuRAppTick(void){
         current_app_status = app_ctxt.app_status;
         switch(app_ctxt.app_status){
             case APP_IDLE:
-                printf("[%d]: Device IDLE", current_timestamp);
+                printf("[%d]: Device IDLE\n", current_timestamp);
                 break;
             case APP_SENDING_WAKE:
-                printf("[%d]: Sending Wake Device REQ!", current_timestamp);
+                printf("[%d]: Sending Wake Device REQ!\n", current_timestamp);
                 wur_addr = _getuint16t(app_ctxt.app_data_buf);
                 wake_ms = _getuint16t(&app_ctxt.app_data_buf[PAYLOAD_OFFSET]);
 
                 tx_res = wur_send_wake(wur_addr, wake_ms);
                 if(tx_res != WUR_ERROR_TX_OK){
-                    printf("[%d]: Failure to send Wake Device REQ!", current_timestamp);
+                    printf("[%d]: Failure to send Wake Device REQ!\n", current_timestamp);
                     _respondWithError(APP_TRANS_KO_TX);
                     app_ctxt.app_status = APP_IDLE;
                 }
                 app_ctxt.app_status = APP_WAITING_WAKE;
                 break;
             case APP_SENDING_DATA:
-                printf("[%d]: Sending Data to Device REQ!", current_timestamp);
+                printf("[%d]: Sending Data to Device REQ!\n", current_timestamp);
                 wur_addr = _getuint16t(app_ctxt.app_data_buf);
 
                 tx_res = wur_send_data(wur_addr, &app_ctxt.app_data_buf[PAYLOAD_OFFSET], app_ctxt.app_data_buf_len - PAYLOAD_OFFSET, false, -1);
                 if(tx_res != WUR_ERROR_TX_OK){
-                    printf("[%d]: Failure to send Data to Device REQ!", current_timestamp);
+                    printf("[%d]: Failure to send Data to Device REQ!\n", current_timestamp);
                     _respondWithError(APP_TRANS_KO_TX);
                     app_ctxt.app_status = APP_IDLE;
                 }
@@ -299,16 +381,16 @@ void WuRAppTick(void){
             case APP_WAITING_DATA:
                 /* wait for the OK/KO Tx callback to change the state*/
                 if(current_timestamp % 500 == 0){
-                    printf("[%d]: Device Waiting ACK", current_timestamp);
+                    printf("[%d]: Device Waiting ACK\n", current_timestamp);
                 }
                 break;
             case APP_RESPONDING_WAKE:
-                printf("[%d]: Sending Response to Wake Device REQ!", current_timestamp);
+                printf("[%d]: Sending Response to Wake Device REQ!\n", current_timestamp);
                 _respondWithPayload(NULL, 0);
                 app_ctxt.app_status = APP_IDLE;
                 break;
             case APP_RESPONDING_DATA:
-                printf("[%d]: Sending Response to Data to Device REQ!", current_timestamp);
+                printf("[%d]: Sending Response to Data to Device REQ!\n", current_timestamp);
                 _respondWithPayload(app_ctxt.app_data_buf, app_ctxt.app_data_buf_len );
                 app_ctxt.app_status = APP_IDLE;
                 break;

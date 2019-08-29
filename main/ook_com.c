@@ -3,8 +3,6 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 
-#define ESP_WIFI_SSID      "wng_wifi"
-#define ESP_WIFI_PASS      ""
 #define TAG "WLAN_RAW"
 
 #ifdef USE_GPIO
@@ -13,8 +11,6 @@
 #define CLEAR_OUTPUT GPIO.out_w1tc = 0x00000010
 #endif
 
-const int WIFI_CONNECTED_BIT = BIT0;
-static EventGroupHandle_t s_wifi_event_group;
 
 /* bits are: [1,1,0,0,1,1,1,0,1,0,1,1,0,1,0,1,0,0,0,0,0,0,0,0], from first = MSB to LSB*/
 static const uint8_t one_seq_6mbps[] = {0xce,0xb5,0x00};
@@ -24,8 +20,6 @@ static const uint8_t one_seq_6mbps[] = {0xce,0xb5,0x00};
 static const uint8_t one_seq_24mbps[] = {0xb0, 0xbf, 0xcb, 0x33, 0xc1, 0xa1, 0x20, 0xd3, 0x35, 0x6a, 0xb5, 0x7f};
 static uint8_t standard_wlan_headers[] = {/* data frame to AP */
 										  0xff,0xff,0xff,0xff,0xff,0xff,0x30, 0xae, 0xa4, 0x05, 0xb6, 0x30};
-
-static uint8_t bssid[6] = {0};
 
 static void _send_preamble_legacy_wlan(wlan_wur_ctxt_t *wur_ctxt){
 
@@ -186,36 +180,6 @@ static esp_err_t set_frame_bit_24_mbps(wlan_wur_ctxt_t *ctxt, uint8_t value){
 	return ESP_OK;
 }
 
-static esp_err_t event_handler(void *ctx, system_event_t *event)
-{
-    switch(event->event_id) {
-    case SYSTEM_EVENT_STA_START:
-        esp_wifi_connect();
-        break;
-    case SYSTEM_EVENT_STA_CONNECTED:
-        /* enable ipv6 */
-        tcpip_adapter_create_ip6_linklocal(TCPIP_ADAPTER_IF_STA);
-        memcpy(bssid, event->event_info.connected.bssid, 6);
-        break;
-
-    case SYSTEM_EVENT_STA_GOT_IP:
-        ESP_LOGI(TAG, "got ip:%s",
-                 ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-        break;
-    case SYSTEM_EVENT_STA_DISCONNECTED:
-        {
-            esp_wifi_connect();
-            xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-            ESP_LOGI(TAG,"connect to the AP fail\n");
-            break;
-        }
-    default:
-        break;
-    }
-    return ESP_OK;
-}
-
 static uint8_t reverse(uint8_t b) {
    b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
    b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
@@ -244,35 +208,8 @@ esp_err_t wlan_wur_init_context(wlan_wur_ctxt_t *wur_context, uint8_t initial_st
 			return ESP_ERR_INVALID_ARG;
 	}
 
-
 	wur_context->symbol_len = symbol_size;
 	wur_context->current_len = 0;
-
-    s_wifi_event_group = xEventGroupCreate();
-    nvs_flash_init();
-    tcpip_adapter_init();
-    ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL) );
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = ESP_WIFI_SSID,
-            .password = ESP_WIFI_PASS
-        },
-    };
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
-    ESP_ERROR_CHECK(esp_wifi_start() );
-
-    ESP_LOGI(TAG, "wifi_init_sta finished.");
-    ESP_LOGI(TAG, "connect to ap SSID:%s password:%s",
-             ESP_WIFI_SSID, ESP_WIFI_PASS);
-    ESP_LOGI(TAG, "Waiting for AP connection...");
-    xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
-    ESP_LOGI(TAG, "Connected to AP");
-
 	switch(symbol_size){
 		case WUR_SIZE_6M:
 			set_wifi_fixed_rate(WIFI_PHY_RATE_6M);
