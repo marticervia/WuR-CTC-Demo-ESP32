@@ -119,24 +119,30 @@ void wur_tick(uint32_t systick){
 	if(wur_context.wur_status == WUR_STATUS_WAIT_DATA_ACK){
 		if(systick - wur_context.tx_timestamp > WUR_DATA_TIMEOUT){
 			printf("Timeout to ack last data frame");
+			xSemaphoreGiveRecursive(wur_mutex);
 			if(wur_context.tx_cb){
 				wur_context.wur_status = WUR_STATUS_IDLE;
 				wur_context.tx_cb(WUR_ERROR_TX_ACK_DATA_TIMEOUT);
 			}
-			else{
-				uint32_t remaining_time = WUR_WAKE_TIMEOUT - (systick - wur_context.tx_timestamp);
-				xSemaphoreGiveRecursive(wur_mutex);
-				xSemaphoreTake(wur_semaphore, remaining_time/portTICK_PERIOD_MS);
-				xSemaphoreTakeRecursive(wur_mutex, portMAX_DELAY);
-			}
+			printf("Wur Returns to idle\n");
+			return;
+		}
+		else{
+			uint32_t remaining_time = WUR_WAKE_TIMEOUT - (systick - wur_context.tx_timestamp);
+			xSemaphoreGiveRecursive(wur_mutex);
+			xSemaphoreTake(wur_semaphore, remaining_time/portTICK_PERIOD_MS);
+			xSemaphoreTakeRecursive(wur_mutex, portMAX_DELAY);
 		}
 	}else if(wur_context.wur_status == WUR_STATUS_WAIT_WAKE_ACK){
 		if(systick - wur_context.tx_timestamp > WUR_WAKE_TIMEOUT){
 			printf("Timeout to ack last wake frame");
+			xSemaphoreGiveRecursive(wur_mutex);
 			if(wur_context.tx_cb){
 				wur_context.wur_status = WUR_STATUS_IDLE;
 				wur_context.tx_cb(WUR_ERROR_TX_ACK_WAKE_TIMEOUT);
 			}
+			printf("Wur Returns to idle\n");
+			return;
 		}
 		else{
 			uint32_t remaining_time = WUR_WAKE_TIMEOUT - (systick - wur_context.tx_timestamp);

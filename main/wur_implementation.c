@@ -20,7 +20,7 @@
 #include "lwip/dns.h"
 
 #include "driver/i2c.h"
-
+#include "cJSON.h"
 
 #include "wur.h"
 #include "i2c_wur.h"
@@ -97,18 +97,52 @@ esp_err_t WuRWakeDevice(httpd_req_t *req){
     }
 
     int payloadLength = httpd_req_recv(req, content, sizeof(content));
-
-    if((payloadLength > MAX_APP_DATA_BUF) || (payloadLength < MIN_WAKE_REQ_LEN)){
-        sprintf(resp, "[%d]: Payload of %d bytes disallowed for WAKE!", current_timestamp, payloadLength);
+    cJSON *root = cJSON_Parse(content);
+    if(root == NULL){
+        sprintf(resp, "[%d]: Payload of %d bytes is NOT JSON!", current_timestamp, payloadLength);
         printf("%s\n", resp);
         httpd_resp_set_status(req, "400 Bad Request");
         httpd_resp_send(req, resp, strlen(resp));
         return ESP_OK;
     }
 
-    memcpy(app_ctxt.app_data_buf, content, payloadLength);
-    app_ctxt.app_data_buf_len = payloadLength;
+    cJSON *address = cJSON_GetObjectItem(root,"wur_address");
+    if((address == NULL) || (!cJSON_IsString(address))){
+        sprintf(resp, "[%d]: Error parsing addres from JSON!", current_timestamp);
+        printf("%s\n", resp);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, resp, strlen(resp));
+        return ESP_OK;
+    }
+    char* addr_str = address->valuestring;
+    uint16_t addr = (int)strtol(addr_str, NULL, 16);
+
+    if(!addr){
+        sprintf(resp, "[%d]: Error parsing a valid address from %s!", current_timestamp, addr_str);
+        printf("%s\n", resp);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, resp, strlen(resp));
+        return ESP_OK;
+    }
+
+    cJSON *wake_ms = cJSON_GetObjectItem(root,"wake_time");
+    if((wake_ms == NULL) || (!cJSON_IsNumber(wake_ms))){
+        sprintf(resp, "[%d]: Error parsing wake time from JSON!", current_timestamp);
+        printf("%s\n", resp);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, resp, strlen(resp));
+        return ESP_OK;
+    }
+
+    uint16_t wake_time = wake_ms->valueint;
+    /* Use the format expected by wur module*/
+    addr = htons(addr);
+    memcpy(app_ctxt.app_data_buf, &addr, sizeof(uint16_t));
+    wake_time = htons(wake_time);
+    memcpy(&app_ctxt.app_data_buf[2], &wake_time, sizeof(uint16_t));
+    app_ctxt.app_data_buf_len = 4;
     app_ctxt.app_status = APP_SENDING_WAKE;
+    xSemaphoreGive(app_semaphore);
 
     if(xSemaphoreTake(http_semaphore, HTTP_TIMEOUT/portTICK_PERIOD_MS) == pdTRUE){
         if(app_ctxt.app_response_code != 200){
@@ -138,17 +172,58 @@ esp_err_t WuRRequestDevice(httpd_req_t *req){
 
     int payloadLength = httpd_req_recv(req, content, sizeof(content));
 
-    if((payloadLength > MAX_APP_DATA_BUF) || (payloadLength < MIN_DATA_REQ_LEN)){
-        sprintf(resp, "[%d]: Payload of %d bytes disallowed for DATA!\n", current_timestamp, payloadLength);
+    cJSON *root = cJSON_Parse(content);
+    if(root == NULL){
+        sprintf(resp, "[%d]: Payload of %d bytes is NOT JSON!", current_timestamp, payloadLength);
         printf("%s\n", resp);
         httpd_resp_set_status(req, "400 Bad Request");
         httpd_resp_send(req, resp, strlen(resp));
         return ESP_OK;
     }
 
-    memcpy(app_ctxt.app_data_buf, content, payloadLength);
-    app_ctxt.app_data_buf_len = payloadLength;
+    cJSON *address = cJSON_GetObjectItem(root,"wur_address");
+    if((address == NULL) || (!cJSON_IsString(address))){
+        sprintf(resp, "[%d]: Error parsing addres from JSON!", current_timestamp);
+        printf("%s\n", resp);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, resp, strlen(resp));
+        return ESP_OK;
+    }
+    char* addr_str = address->valuestring;
+    uint16_t addr = (int)strtol(addr_str, NULL, 16);
+    if(!addr){
+        sprintf(resp, "[%d]: Error parsing a valid address from %s!", current_timestamp, addr_str);
+        printf("%s\n", resp);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, resp, strlen(resp));
+        return ESP_OK;
+    }
+
+    addr = htons(addr);
+    memcpy(app_ctxt.app_data_buf, &addr, sizeof(uint16_t));
+
+    cJSON *data_json = cJSON_GetObjectItem(root,"data");
+    if((data_json == NULL) || (!cJSON_IsString(data_json))){
+        sprintf(resp, "[%d]: Error parsing data string from JSON!", current_timestamp);
+        printf("%s\n", resp);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, resp, strlen(resp));
+        return ESP_OK;
+    }
+
+    uint8_t* data_pos = app_ctxt.app_data_buf + 2;
+    /* it is hex encoded without any preciding 0x preamble*/
+    char* data_str = address->valuestring;
+    uint16_t data_str_len = strlen(data_str);
+    for( int16_t i = 0; i < data_str_len; i = i+2){
+        char hex_byte[3] = {0};
+        memcpy(hex_byte, addr_str + i, 2);
+        hex_byte[2] = '\0';
+        data_pos[i/2] = (int)strtol(hex_byte, NULL, 16);
+    }
+    app_ctxt.app_data_buf_len = 2 + data_str_len/2;
     app_ctxt.app_status = APP_SENDING_DATA;
+    xSemaphoreGive(app_semaphore);
 
     if(xSemaphoreTake(http_semaphore, HTTP_TIMEOUT/portTICK_PERIOD_MS) == pdTRUE){
         if(app_ctxt.app_response_code != 200){
@@ -158,6 +233,7 @@ esp_err_t WuRRequestDevice(httpd_req_t *req){
     }else{
         httpd_resp_send_408(req);
     }
+
     return ESP_OK;
 }
 
@@ -178,7 +254,7 @@ static void _respondWithError(app_trans_result_t res){
     const uint8_t res_payload[2] = {0};
     _setint16t((uint8_t*) res_payload, res);
     app_ctxt.app_response_code = 500;
-    xSemaphoreGive(app_semaphore);
+    xSemaphoreGive(http_semaphore);
 }
 
 static void _respondWithPayload(uint8_t* payload, uint8_t payload_len){
@@ -186,7 +262,7 @@ static void _respondWithPayload(uint8_t* payload, uint8_t payload_len){
     memcpy(app_ctxt.app_data_buf, payload, payload_len);
     app_ctxt.app_data_buf_len = payload_len;
     app_ctxt.app_response_code = 200;
-    xSemaphoreGive(app_semaphore);
+    xSemaphoreGive(http_semaphore);
 }
 
 
@@ -203,7 +279,10 @@ static void _printBuffer(uint8_t* res, uint8_t res_length){
 static void _wur_tx_cb(wur_tx_res_t tx_res){
     uint32_t current_timestamp = get_timestamp_ms();
 
+    printf("[%d]: TX Callback!!\n", current_timestamp);
     xSemaphoreTakeRecursive(app_mutex, portMAX_DELAY);
+    printf("[%d]: TX Callback takes APP mutex!!\n", current_timestamp);
+
     switch(app_ctxt.app_status){
         case APP_WAITING_WAKE:
         case APP_WAITING_DATA:
@@ -236,6 +315,7 @@ static void _wur_tx_cb(wur_tx_res_t tx_res){
             printf("[%d]: Received ACK while not waiting. Is this an error?!\n", current_timestamp);
             break;
     }
+    printf("[%d]: TX Callback awakes APP task!!\n", current_timestamp);
     xSemaphoreGiveRecursive(app_mutex);
     xSemaphoreGive(app_semaphore);
 }
@@ -408,10 +488,10 @@ void IRAM_ATTR app_main()
     while(1){
 
         xSemaphoreTake(app_semaphore, WUR_DEFAULT_TIMEOUT/portTICK_PERIOD_MS);
-
+        ESP_LOGI(TAG, "Wake from APP semaphore!\n");
         xSemaphoreTakeRecursive(app_mutex, portMAX_DELAY);
         WuRAppTick();
-        xSemaphoreTakeRecursive(app_mutex, portMAX_DELAY);
+        xSemaphoreGiveRecursive(app_mutex);
     }
 }
 
