@@ -10,7 +10,7 @@
 #include "i2c_com.h"
 
 #define DEBUG
-#define I2C_SLAVE_ADDR 0x28
+#define I2C_SLAVE_ADDR 0x14
 
 #ifdef DEBUG
 #define DEBUG_PRINT(...) printf(__VA_ARGS__)

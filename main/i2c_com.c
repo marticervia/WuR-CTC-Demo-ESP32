@@ -19,7 +19,7 @@
 #define I2C_SCL 21
 #define I2C_SDA 22 
 
-#define I2C_MASTER_FREQ_HZ 400000
+#define I2C_MASTER_FREQ_HZ 550000
 
 #define I2C_CLOCK_DELAY 20 //micros
 #define I2C_START_DELAY 20 //micros
@@ -87,6 +87,18 @@ static inline esp_err_t _i2c_com_master_transfer(uint8_t i2c_slave_addr, uint16_
 
   i2c_master_stop(i2c_cmd);
 
+  gpio_set_level(I2C_WAKEUP_GPIO, 1);
+  I2C_WAKEUP;
+  gpio_set_level(I2C_WAKEUP_GPIO, 0);
+
+  esp_err_t ret = i2c_master_cmd_begin(I2C_NUM_1, i2c_cmd, 1000 / portTICK_RATE_MS);
+  i2c_cmd_link_delete(i2c_cmd);
+
+  if(ret != ESP_OK){
+    printf("Error %d at transaction.\n", ret);
+    return ESP_FAIL;
+  }
+
   return ESP_OK;
 }
 
@@ -95,10 +107,6 @@ esp_err_t i2c_com_write_register(uint8_t i2c_slave_addr, uint8_t reg_addr, uint8
   esp_err_t i2c_trans_res;
 
   reg_buffer[0] = reg_addr;
-
-  gpio_set_level(I2C_WAKEUP_GPIO, 1);
-  I2C_WAKEUP;
-  gpio_set_level(I2C_WAKEUP_GPIO, 0);
 
   i2c_trans_res = _i2c_com_master_transfer(i2c_slave_addr, I2C_FLAG_WRITE, reg_buffer,1, NULL, 0);
   if(i2c_trans_res != ESP_OK){
@@ -114,10 +122,6 @@ esp_err_t i2c_com_read_register(uint8_t i2c_slave_addr, uint8_t reg_addr, uint8_
   esp_err_t i2c_trans_res;
 
   reg_buffer[0] = reg_addr;
-
-  gpio_set_level(I2C_WAKEUP_GPIO, 1);
-  I2C_WAKEUP;
-  gpio_set_level(I2C_WAKEUP_GPIO, 0);
 
   i2c_trans_res = _i2c_com_master_transfer(i2c_slave_addr, I2C_FLAG_WRITE, reg_buffer,1, NULL, 0);
   if(i2c_trans_res != ESP_OK){
