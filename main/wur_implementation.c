@@ -30,8 +30,8 @@
 #include "index.h"
 
 #define TAG "APP"
-#define ESP_WIFI_SSID      "MKSA"
-#define ESP_WIFI_PASS      "joan65629joan"
+#define ESP_WIFI_SSID      "wng_wifi"
+#define ESP_WIFI_PASS      "yeuyeuyeu"
 
 static app_ctxt_t app_ctxt;
 static SemaphoreHandle_t app_mutex;

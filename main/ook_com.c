@@ -4,11 +4,14 @@
 #include "nvs_flash.h"
 
 #define TAG "WLAN_RAW"
+#define USE_GPIO
 
 #ifdef USE_GPIO
 #define OUTPUT_GPIO GPIO_NUM_4
 #define SET_OUTPUT GPIO.out_w1ts = 0x00000010
 #define CLEAR_OUTPUT GPIO.out_w1tc = 0x00000010
+
+static portMUX_TYPE wlanGroupMux;	
 #endif
 
 
@@ -20,6 +23,7 @@ static const uint8_t one_seq_6mbps[] = {0xce,0xb5,0x00};
 static const uint8_t one_seq_24mbps[] = {0xb0, 0xbf, 0xcb, 0x33, 0xc1, 0xa1, 0x20, 0xd3, 0x35, 0x6a, 0xb5, 0x7f};
 static uint8_t standard_wlan_headers[] = {/* data frame to AP */
 										  0xff,0xff,0xff,0xff,0xff,0xff,0x30, 0xae, 0xa4, 0x05, 0xb6, 0x30};
+
 
 static void _send_preamble_legacy_wlan(wlan_wur_ctxt_t *wur_ctxt){
 
@@ -40,7 +44,14 @@ static void _send_preamble_legacy_wlan(wlan_wur_ctxt_t *wur_ctxt){
 
 #ifdef USE_GPIO
 
-static __inline__ void cdelay(uint32_t cycles)
+static inline unsigned get_ccount(void)
+{
+        unsigned r;
+        asm volatile ("rsr %0, ccount" : "=r"(r));
+        return r;
+}
+
+static inline void cdelay(uint32_t cycles)
 {
     uint32_t stop;
     asm volatile ("rsr %0, ccount" : "=r"(stop));
@@ -74,10 +85,12 @@ static void IRAM_ATTR _send_preamble_legacy_gpio(void){
     cdelay(945);
     SET_OUTPUT;
     cdelay(945);
+    SET_OUTPUT;
+    cdelay(945);
 }
 #endif
 
-static void _send_byte_legacy_wlan(wlan_wur_ctxt_t *wur_ctxt, uint8_t byte){
+static IRAM_ATTR void _send_byte_legacy_wlan(wlan_wur_ctxt_t *wur_ctxt, uint8_t byte){
     for(int16_t i = 7; i >= 0; i--){
     	uint8_t bit;
         bit = (byte & (1 << i)) >> i;
@@ -89,6 +102,7 @@ static void _send_byte_legacy_wlan(wlan_wur_ctxt_t *wur_ctxt, uint8_t byte){
         }else{
         	CLEAR_OUTPUT;
         }
+        cdelay(925);
 #endif
     }
 }
@@ -153,7 +167,7 @@ static esp_err_t scramble_payload(wlan_wur_ctxt_t *ctxt, uint16_t len){
 	return ESP_OK;
 }
 
-static esp_err_t set_frame_bit_6_mbps(wlan_wur_ctxt_t *ctxt, uint8_t value){
+static IRAM_ATTR esp_err_t set_frame_bit_6_mbps(wlan_wur_ctxt_t *ctxt, uint8_t value){
 
 	if(value){
 		memcpy(&ctxt->frame_buffer[ctxt->current_len], one_seq_6mbps, 3);
@@ -167,7 +181,7 @@ static esp_err_t set_frame_bit_6_mbps(wlan_wur_ctxt_t *ctxt, uint8_t value){
 
 }
 
-static esp_err_t set_frame_bit_24_mbps(wlan_wur_ctxt_t *ctxt, uint8_t value){
+static IRAM_ATTR esp_err_t set_frame_bit_24_mbps(wlan_wur_ctxt_t *ctxt, uint8_t value){
 
 	if(value){
 		memcpy(&ctxt->frame_buffer[ctxt->current_len], one_seq_24mbps, 12);
@@ -293,7 +307,7 @@ esp_err_t wlan_wur_init_frame(wlan_wur_ctxt_t *wur_context){
 	return ESP_OK;
 }
 
-esp_err_t wlan_wur_transmit_frame(wlan_wur_ctxt_t *wur_context, uint8_t* data_bytes, uint8_t data_bytes_len){
+esp_err_t IRAM_ATTR wlan_wur_transmit_frame(wlan_wur_ctxt_t *wur_context, uint8_t* data_bytes, uint8_t data_bytes_len){
 	esp_err_t esp_res;
 
 #ifndef USE_GPIO
@@ -304,6 +318,9 @@ esp_err_t wlan_wur_transmit_frame(wlan_wur_ctxt_t *wur_context, uint8_t* data_by
 	}
 	_send_preamble_legacy_wlan(wur_context);
 #else
+	portENTER_CRITICAL(&wlanGroupMux);
+	SET_OUTPUT;
+    ets_delay_us(20);
 	_send_preamble_legacy_gpio();
 #endif
 
@@ -318,9 +335,10 @@ esp_err_t wlan_wur_transmit_frame(wlan_wur_ctxt_t *wur_context, uint8_t* data_by
         printf("Failed to sand frame of len %d because of %d.\n", wur_context->current_len, res);
         return ESP_FAIL;
     }
+    printf("Successfully sent frame of len %d!\n", wur_context->current_len);
 #else
     CLEAR_OUTPUT;
+    portEXIT_CRITICAL(&wlanGroupMux);
 #endif
-    printf("Successfully sent frame of len %d!\n", wur_context->current_len);
     return ESP_OK;
 }

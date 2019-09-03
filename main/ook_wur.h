@@ -12,6 +12,7 @@
 #define WUR_WAKE_LEN 2
 #define WUR_HEADER_LEN 4 //4 bytes with CRC
 #define WUR_MAX_DATA_LEN 89
+#define WUR_MAX_DATA_LEN 89
 
 #define WAKE_FLAG 0b001
 #define ACK_FLAG 0b010

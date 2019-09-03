@@ -8,7 +8,7 @@
 #ifndef WUR_IMPLEMENTATION_H_
 #define WUR_IMPLEMENTATION_H_
 
-#define WUR_ADDR 0x0555
+#define WUR_ADDR 0x0111
 #define MAX_APP_DATA_BUF 34
 
 #define ADDR_OFFSET 0

@@ -10,6 +10,7 @@
 
 #include "ook_com.h"
 #include "ook_wur.h"
+#include "utils.h"
 
 #include <string.h>
 
@@ -36,12 +37,10 @@ static const uint8_t crc8_table[] = {
 };
 
 static uint8_t _ook_calculate_crc8(uint8_t* payload, uint8_t payload_len){
-    uint8_t i, crc = 0;
-    int16_t byte_len = 0;
+    uint8_t crc = 0;
+    int16_t i = 0;
 
-    byte_len = payload_len/8;
-
-    for(i = 0; i < byte_len; i++){
+    for(i = 0; i < payload_len; i++){
         crc = crc8_table[crc ^ payload[i]];
     }
     
@@ -51,9 +50,21 @@ static uint8_t _ook_calculate_crc8(uint8_t* payload, uint8_t payload_len){
 static ook_tx_errors_t _ook_wur_transmit(uint8_t* data, uint8_t len){
 	esp_err_t esp_res;
 	uint8_t crc8;
+	uint16_t i;
+
+	printf("Calculate CRC of data with len %d:\n", len);
+	printf("0x");
+	for(i = 0; i < len -2; i++){
+		printf("%02X:", data[i]);
+	}
+	printf("%02X\n", data[i]);
 
 	crc8 = _ook_calculate_crc8(data, len - 1);
-	data[len - 1] = crc8; 
+	printf("Got CRC of %02X.\n", crc8);
+	data[len-1] = crc8; 
+
+	printf("Send frame:\n");
+	print_frame(data, len);
 
 	esp_res = wlan_wur_transmit_frame(&wlan_wur_ctxt, data, len);
 	if(esp_res != ESP_OK){
@@ -72,7 +83,7 @@ ook_tx_errors_t ook_wur_wake(uint16_t dest, uint16_t ms_wake, uint8_t seq){
 	uint8_t wake_frame[5] = {0};
 
 
-	printf("Sending OOK wake frame to addr %02X .", dest);
+	printf("Sending OOK wake frame to addr %02X .\n", dest);
 
 	wake_frame[0] = (uint8_t)(dest & 0x00FF);
 	wake_frame[1] = (uint8_t)((dest & 0x0F00) >> 4);
@@ -93,7 +104,7 @@ ook_tx_errors_t ook_wur_data(uint16_t dest, uint8_t* data, uint8_t len, bool ack
 		return OOK_WUR_TX_ERROR_FRAME_FORMAT;
 	}
 
-	printf("Sending OOK data frame to addr %02X .", dest);
+	printf("Sending OOK data frame to addr %02X .\n", dest);
 
 	data_frame[0] = (uint8_t)(dest & 0x00FF);
 	data_frame[1] = (uint8_t)((dest & 0x0F00) >> 4);
@@ -112,8 +123,10 @@ ook_tx_errors_t ook_wur_data(uint16_t dest, uint8_t* data, uint8_t len, bool ack
 	return _ook_wur_transmit(data_frame, len + WUR_HEADER_LEN);
 }
 
+static uint8_t ack_buffer[6];
+
 ook_tx_errors_t ook_wur_ack(uint16_t dest, uint8_t seq){
-	return ook_wur_data(dest, NULL, 0, true, seq);
+	return ook_wur_data(dest, ack_buffer, 0, true, seq);
 }
 
 

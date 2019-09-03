@@ -14,8 +14,8 @@
 #define WUR_DATA_TIMEOUT 10000
 #define WUR_PAYLOAD_OFFSET 3
 
-#define GPIO_WAKE GPIO_NUM_0
-#define GPIO_WAKE_PIN_SEL  (1<<0)
+#define GPIO_WAKE GPIO_NUM_2
+#define GPIO_WAKE_PIN_SEL  (1<<GPIO_NUM_2)
 
 typedef enum wur_tx_res{
 	WUR_ERROR_TX_OK = 0,
