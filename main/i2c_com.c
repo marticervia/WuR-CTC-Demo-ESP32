@@ -60,9 +60,10 @@ void i2c_com_init(void){
 }
 
 static inline esp_err_t _i2c_com_master_transfer(uint8_t i2c_slave_addr, uint16_t i2c_mode, uint8_t* buffer_1, uint16_t buffer_1_len,
-    uint8_t* buffer_2, uint16_t buffer_2_len){
+  uint8_t* buffer_2, uint16_t buffer_2_len){
   uint8_t addr_byte;
   i2c_cmd_handle_t i2c_cmd = i2c_cmd_link_create();
+
 
   if(i2c_cmd == NULL){
     printf("i2c command null.\n");

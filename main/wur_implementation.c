@@ -211,17 +211,18 @@ esp_err_t WuRRequestDevice(httpd_req_t *req){
         return ESP_OK;
     }
 
-    uint8_t* data_pos = app_ctxt.app_data_buf + 2;
-    /* it is hex encoded without any preciding 0x preamble*/
-    char* data_str = address->valuestring;
+    char* data_str = data_json->valuestring;
     uint16_t data_str_len = strlen(data_str);
+
     for( int16_t i = 0; i < data_str_len; i = i+2){
         char hex_byte[3] = {0};
-        memcpy(hex_byte, addr_str + i, 2);
+        memcpy(hex_byte, data_str + i, 2);
         hex_byte[2] = '\0';
-        data_pos[i/2] = (int)strtol(hex_byte, NULL, 16);
+        app_ctxt.app_data_buf[2 + (i/2)] = (int)strtol(hex_byte, NULL, 16);
     }
-    app_ctxt.app_data_buf_len = 2 + data_str_len/2;
+    app_ctxt.app_data_buf_len = 2 + (data_str_len/2);
+    printf("Sending data with len %d", app_ctxt.app_data_buf_len);
+    print_frame(app_ctxt.app_data_buf, app_ctxt.app_data_buf_len);
     app_ctxt.app_status = APP_SENDING_DATA;
     xSemaphoreGive(app_semaphore);
 

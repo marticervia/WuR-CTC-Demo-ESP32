@@ -104,7 +104,7 @@ ook_tx_errors_t ook_wur_data(uint16_t dest, uint8_t* data, uint8_t len, bool ack
 		return OOK_WUR_TX_ERROR_FRAME_FORMAT;
 	}
 
-	printf("Sending OOK data frame to addr %02X .\n", dest);
+	printf("Sending OOK data frame to addr %02X with len %d.\n", dest, len);
 
 	data_frame[0] = (uint8_t)(dest & 0x00FF);
 	data_frame[1] = (uint8_t)((dest & 0x0F00) >> 4);

@@ -9,7 +9,7 @@
 #define WUR_IMPLEMENTATION_H_
 
 #define WUR_ADDR 0x0111
-#define MAX_APP_DATA_BUF 34
+#define MAX_APP_DATA_BUF 96
 
 #define ADDR_OFFSET 0
 #define PAYLOAD_OFFSET 2
