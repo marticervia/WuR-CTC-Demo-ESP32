@@ -88,7 +88,7 @@ ook_tx_errors_t ook_wur_wake(uint16_t dest, uint16_t ms_wake, uint8_t seq){
 	wake_frame[0] = (uint8_t)(dest & 0x00FF);
 	wake_frame[1] = (uint8_t)((dest & 0x0F00) >> 4);
 
-	wake_frame[1] |= (DATA_FLAG << 1) | seq;
+	wake_frame[1] |= ((WAKE_FLAG) << 1) | seq;
 	wake_frame[2] = WUR_WAKE_LEN;
 	ms_wake = htons(ms_wake);
 	memcpy(&wake_frame[3], &ms_wake, 2);

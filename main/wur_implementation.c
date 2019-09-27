@@ -85,7 +85,7 @@ esp_err_t WuRWakeDevice(httpd_req_t *req){
     ESP_LOGI(TAG,"Received /wur/wake request");
     uint32_t current_timestamp = get_timestamp_ms();
     printf("[%d]: Got Wake Device REQ!\n", current_timestamp);
-    char content[100];
+    char content[300];
     char resp[256];
 
     if(app_ctxt.app_status != APP_IDLE){
@@ -159,7 +159,7 @@ esp_err_t WuRRequestDevice(httpd_req_t *req){
     ESP_LOGI(TAG,"Received /wur/data request");
     uint32_t current_timestamp = get_timestamp_ms();
     printf("[%d]: Got Data Device REQ!\n", current_timestamp);
-    char content[100];
+    char content[300];
     char resp[256];
 
     if(app_ctxt.app_status != APP_IDLE){

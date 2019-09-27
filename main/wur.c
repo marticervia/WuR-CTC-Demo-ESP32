@@ -45,7 +45,7 @@ static SemaphoreHandle_t wur_mutex;
 /* handles the interruption genrated by the WUR GPIO pin. */
 static IRAM_ATTR void wur_int_handler(void* arg)
 {
-	BaseType_t xTaskWokenByReceive = pdFALSE;
+	BaseType_t xTaskWokenByReceive = pdTRUE;
     uint32_t gpio_num = (uint32_t) arg;
     if(gpio_num == GPIO_WAKE){
 		wur_op_pending = 1;
@@ -105,7 +105,7 @@ void wur_init(uint16_t addr){
 	            "wur_task",
 	            2048,
 	            NULL,
-	            17,
+	            6,
 	            NULL
 	         );
 }
@@ -161,7 +161,6 @@ void wur_tick(uint32_t systick){
 	}
 
 	wur_op_pending = false;
-
 	i2c_wur_status_t wurx_state;
 	if(wur_get_status(&wurx_state) != WUR_OK){
 		printf("Warning: failed to get state from WuR after interrupt!\n");
@@ -178,8 +177,8 @@ void wur_tick(uint32_t systick){
 		goto exit;
 	}
 
-	printf("Got WuR Frame:\n");
-	print_frame(wur_context.frame_buffer, wurx_state.wur_frame_len);
+	//printf("Got WuR Frame:\n");
+	//print_frame(wur_context.frame_buffer, wurx_state.wur_frame_len);
 
 	wur_context.frame_len = wurx_state.wur_frame_len;
 	uint8_t frame_type = (wur_context.frame_buffer[1] & 0x0E) >> 1;
@@ -193,7 +192,7 @@ void wur_tick(uint32_t systick){
 	if(frame_type & ACK_FLAG){
 		if(wur_context.expected_seq_num == seq_num){
 			if(wur_context.tx_cb){
-				printf("Got ACK!\n");
+				//printf("Got ACK!\n");
 				wur_context.wur_status = WUR_STATUS_IDLE;
 				wur_context.tx_cb(WUR_ERROR_TX_OK);
 				wur_context.expected_seq_num ^= 1;
@@ -201,7 +200,7 @@ void wur_tick(uint32_t systick){
 		}
 		else{
 			if(wur_context.tx_cb){
-				printf("Got NACK!\n");
+				//printf("Got NACK!\n");
 				wur_context.wur_status = WUR_STATUS_IDLE;
 				wur_context.tx_cb(WUR_ERROR_TX_NACK);
 				wur_context.expected_seq_num ^= 1;
@@ -209,15 +208,15 @@ void wur_tick(uint32_t systick){
 		}
 	}
 	else if((frame_type & DATA_FLAG) || (frame_type & WAKE_FLAG)){
-		printf("Got DATA or WAKE!\n");
+		//printf("Got DATA or WAKE!\n");
 		/* an ack can piggiback a response frame, so continue*/
 		if((wur_context.frame_len > 3) && wur_context.rx_cb){
-			printf("parse DATA!\n");
+			//printf("parse DATA!\n");
 			wur_context.rx_cb(WUR_ERROR_RX_OK, wur_context.frame_buffer, wur_context.frame_len);
 			wur_context.rx_timestamp = systick;
 		}
 		if(!(frame_type & ACK_FLAG)){
-			printf("Acknowledge DATA frame to 0x%02X!\n", addr);
+			//printf("Acknowledge DATA frame to 0x%02X!\n", addr);
 			wur_send_ack(addr, seq_num);
 		}
 	}else{
