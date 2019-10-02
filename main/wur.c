@@ -50,6 +50,7 @@ static IRAM_ATTR void wur_int_handler(void* arg)
     if(gpio_num == GPIO_WAKE){
 		wur_op_pending = 1;
 		xSemaphoreGiveFromISR(wur_semaphore, &xTaskWokenByReceive);
+		portYIELD_FROM_ISR();
     }
 }
 
@@ -105,7 +106,7 @@ void wur_init(uint16_t addr){
 	            "wur_task",
 	            2048,
 	            NULL,
-	            6,
+	            24,
 	            NULL
 	         );
 }
@@ -302,7 +303,7 @@ wur_tx_res_t wur_send_data(uint16_t addr, uint8_t* data, uint8_t data_len, uint8
 wur_tx_res_t wur_send_ack(uint16_t addr, int8_t ack_seq_num){
 	ook_tx_errors_t tx_res;
 	wur_tx_res_t res;
-	printf("Sending WuR ACK!\n");
+	//printf("Sending WuR ACK!\n");
 
 	xSemaphoreTakeRecursive(wur_mutex, portMAX_DELAY);
 

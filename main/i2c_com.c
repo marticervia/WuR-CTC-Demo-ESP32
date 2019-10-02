@@ -109,8 +109,6 @@ esp_err_t i2c_com_write_register(uint8_t i2c_slave_addr, uint8_t reg_addr, uint8
   I2C_WAKEUP;
   gpio_set_level(I2C_WAKEUP_GPIO, 0);
 
-	ets_delay_us(100);
-
   i2c_trans_res = _i2c_com_master_transfer(i2c_slave_addr, I2C_FLAG_WRITE, reg_buffer,1, NULL, 0);
   if(i2c_trans_res != ESP_OK){
     return ESP_FAIL;
@@ -128,8 +126,6 @@ esp_err_t i2c_com_read_register(uint8_t i2c_slave_addr, uint8_t reg_addr, uint8_
   gpio_set_level(I2C_WAKEUP_GPIO, 1);
   I2C_WAKEUP;
   gpio_set_level(I2C_WAKEUP_GPIO, 0);
-
-	ets_delay_us(100);
 
   i2c_trans_res = _i2c_com_master_transfer(i2c_slave_addr, I2C_FLAG_WRITE, reg_buffer,1, NULL, 0);
   if(i2c_trans_res != ESP_OK){

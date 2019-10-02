@@ -11,7 +11,7 @@
 #define SET_OUTPUT GPIO.out_w1ts = 0x00000010
 #define CLEAR_OUTPUT GPIO.out_w1tc = 0x00000010
 
-static portMUX_TYPE wlanGroupMux;	
+static portMUX_TYPE wlanGroupMux = portMUX_INITIALIZER_UNLOCKED;	
 #endif
 
 

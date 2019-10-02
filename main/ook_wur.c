@@ -52,19 +52,19 @@ static ook_tx_errors_t _ook_wur_transmit(uint8_t* data, uint8_t len){
 	uint8_t crc8;
 	uint16_t i;
 
-	printf("Calculate CRC of data with len %d:\n", len);
+	/*printf("Calculate CRC of data with len %d:\n", len);
 	printf("0x");
 	for(i = 0; i < len -2; i++){
 		printf("%02X:", data[i]);
 	}
 	printf("%02X\n", data[i]);
-
+	*/
 	crc8 = _ook_calculate_crc8(data, len - 1);
-	printf("Got CRC of %02X.\n", crc8);
+	//printf("Got CRC of %02X.\n", crc8);
 	data[len-1] = crc8; 
 
-	printf("Send frame:\n");
-	print_frame(data, len);
+	//printf("Send frame:\n");
+	//print_frame(data, len);
 
 	esp_res = wlan_wur_transmit_frame(&wlan_wur_ctxt, data, len);
 	if(esp_res != ESP_OK){
@@ -83,7 +83,7 @@ ook_tx_errors_t ook_wur_wake(uint16_t dest, uint16_t ms_wake, uint8_t seq){
 	uint8_t wake_frame[5] = {0};
 
 
-	printf("Sending OOK wake frame to addr %02X .\n", dest);
+	//printf("Sending OOK wake frame to addr %02X .\n", dest);
 
 	wake_frame[0] = (uint8_t)(dest & 0x00FF);
 	wake_frame[1] = (uint8_t)((dest & 0x0F00) >> 4);
@@ -104,7 +104,7 @@ ook_tx_errors_t ook_wur_data(uint16_t dest, uint8_t* data, uint8_t len, bool ack
 		return OOK_WUR_TX_ERROR_FRAME_FORMAT;
 	}
 
-	printf("Sending OOK data frame to addr %02X with len %d.\n", dest, len);
+	//printf("Sending OOK data frame to addr %02X with len %d.\n", dest, len);
 
 	data_frame[0] = (uint8_t)(dest & 0x00FF);
 	data_frame[1] = (uint8_t)((dest & 0x0F00) >> 4);

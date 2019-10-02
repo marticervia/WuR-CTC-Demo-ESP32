@@ -9,7 +9,7 @@
 #include "i2c_wur.h"
 #include "i2c_com.h"
 
-#define DEBUG
+//#define DEBUG
 #define I2C_SLAVE_ADDR 0x14
 
 #ifdef DEBUG

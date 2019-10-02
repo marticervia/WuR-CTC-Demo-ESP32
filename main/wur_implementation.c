@@ -280,21 +280,21 @@ static void _printBuffer(uint8_t* res, uint8_t res_length){
 static void _wur_tx_cb(wur_tx_res_t tx_res){
     uint32_t current_timestamp = get_timestamp_ms();
 
-    printf("[%d]: TX Callback!!\n", current_timestamp);
+    //printf("[%d]: TX Callback!!\n", current_timestamp);
     xSemaphoreTakeRecursive(app_mutex, portMAX_DELAY);
-    printf("[%d]: TX Callback takes APP mutex!!\n", current_timestamp);
+    //printf("[%d]: TX Callback takes APP mutex!!\n", current_timestamp);
 
     switch(app_ctxt.app_status){
         case APP_WAITING_WAKE:
         case APP_WAITING_DATA:
             if(tx_res == WUR_ERROR_TX_OK){
                 if(app_ctxt.app_status == APP_WAITING_WAKE){
-                    printf("[%d]: Going to respond to Wake!\n", current_timestamp);
+                    //printf("[%d]: Going to respond to Wake!\n", current_timestamp);
                     app_ctxt.app_status = APP_RESPONDING_WAKE;
 
                 }
                 else{
-                    printf("[%d]: Going to respond to Data!\n", current_timestamp);
+                    //printf("[%d]: Going to respond to Data!\n", current_timestamp);
                     app_ctxt.app_status = APP_RESPONDING_DATA;
                 }
                 memset(app_ctxt.app_data_buf, 0, MAX_APP_DATA_BUF);
@@ -316,7 +316,7 @@ static void _wur_tx_cb(wur_tx_res_t tx_res){
             printf("[%d]: Received ACK while not waiting. Is this an error?!\n", current_timestamp);
             break;
     }
-    printf("[%d]: TX Callback awakes APP task!!\n", current_timestamp);
+    //printf("[%d]: TX Callback awakes APP task!!\n", current_timestamp);
     xSemaphoreGiveRecursive(app_mutex);
     xSemaphoreGive(app_semaphore);
 }
@@ -325,10 +325,10 @@ static void _wur_tx_cb(wur_tx_res_t tx_res){
 static void _wur_rx_cb(wur_rx_res_t rx_res, uint8_t* rx_bytes, uint8_t rx_bytes_len){
     uint32_t current_timestamp = get_timestamp_ms();
 
-    printf("[%d]: Received response with status %d!\n", current_timestamp, rx_res);
-    _printBuffer(rx_bytes, rx_bytes_len);
+    //printf("[%d]: Received frame with status %d!\n", current_timestamp, rx_res);
+    //_printBuffer(rx_bytes, rx_bytes_len);
     if(rx_bytes_len > MAX_APP_DATA_BUF){
-        printf("[%d]: Received response above max frame size %d!\n", current_timestamp, rx_bytes_len);
+        printf("[%d]: Received frame above max frame size %d!\n", current_timestamp, rx_bytes_len);
         return;
     }
 
@@ -363,7 +363,6 @@ httpd_uri_t uri_data = {
     .handler  = WuRRequestDevice,
     .user_ctx = NULL
 };
-
 
 void WuRInitApp(void){
     wur_init(WUR_ADDR);
@@ -466,12 +465,12 @@ void WuRAppTick(void){
                 }
                 break;
             case APP_RESPONDING_WAKE:
-                printf("[%d]: Sending Response to Wake Device REQ!\n", current_timestamp);
+                //printf("[%d]: Sending Response to Wake Device REQ!\n", current_timestamp);
                 _respondWithPayload(NULL, 0);
                 app_ctxt.app_status = APP_IDLE;
                 break;
             case APP_RESPONDING_DATA:
-                printf("[%d]: Sending Response to Data to Device REQ!\n", current_timestamp);
+                //printf("[%d]: Sending Response to Data to Device REQ!\n", current_timestamp);
                 _respondWithPayload(app_ctxt.app_data_buf, app_ctxt.app_data_buf_len );
                 app_ctxt.app_status = APP_IDLE;
                 break;
@@ -489,7 +488,7 @@ void IRAM_ATTR app_main()
     while(1){
 
         xSemaphoreTake(app_semaphore, WUR_DEFAULT_TIMEOUT/portTICK_PERIOD_MS);
-        ESP_LOGI(TAG, "Wake from APP semaphore!\n");
+        //ESP_LOGI(TAG, "Wake from APP semaphore!\n");
         xSemaphoreTakeRecursive(app_mutex, portMAX_DELAY);
         WuRAppTick();
         xSemaphoreGiveRecursive(app_mutex);
