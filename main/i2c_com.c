@@ -19,7 +19,7 @@
 #define I2C_SCL 21
 #define I2C_SDA 22 
 
-#define I2C_MASTER_FREQ_HZ 550000
+#define I2C_MASTER_FREQ_HZ 600000
 
 #define I2C_CLOCK_DELAY 20 //micros
 #define I2C_START_DELAY 20 //micros
@@ -59,12 +59,13 @@ void i2c_com_init(void){
   printf("Initialized i2c\n");
 }
 
-static inline esp_err_t _i2c_com_master_transfer(uint8_t i2c_slave_addr, uint16_t i2c_mode, uint8_t* buffer_1, uint16_t buffer_1_len,
-  uint8_t* buffer_2, uint16_t buffer_2_len){
+static inline esp_err_t _i2c_com_master_transfer(uint8_t i2c_slave_addr, uint16_t i2c_mode, uint8_t register_num, uint8_t* buffer, uint16_t buffer_len){
   uint8_t addr_byte;
-  i2c_cmd_handle_t i2c_cmd = i2c_cmd_link_create();
+  i2c_cmd_handle_t i2c_cmd; 
+  esp_err_t ret;
 
 
+  i2c_cmd = i2c_cmd_link_create();
   if(i2c_cmd == NULL){
     printf("i2c command null.\n");
     return 1;
@@ -72,23 +73,58 @@ static inline esp_err_t _i2c_com_master_transfer(uint8_t i2c_slave_addr, uint16_
 
   i2c_master_start(i2c_cmd);
 
-  if(i2c_mode == I2C_FLAG_WRITE){
-      addr_byte = (i2c_slave_addr << 1) | I2C_WRITE_MASK;
-  }else{
-      addr_byte = (i2c_slave_addr << 1) | I2C_READ_MASK;
+  addr_byte = (i2c_slave_addr << 1) | I2C_WRITE_MASK;
+
+  /* write header*/
+  i2c_master_write_byte(i2c_cmd, addr_byte, ACK_CHECK_EN);
+  i2c_master_write_byte(i2c_cmd, register_num, ACK_CHECK_EN);
+
+  i2c_master_stop(i2c_cmd);
+
+  ret = i2c_master_cmd_begin(I2C_NUM_1, i2c_cmd, 1000 / portTICK_RATE_MS);
+  i2c_cmd_link_delete(i2c_cmd);
+
+  if(ret != ESP_OK){
+    printf("Error %d at transaction.\n", ret);
+    return ESP_FAIL;
   }
 
-  i2c_master_write_byte(i2c_cmd, addr_byte, ACK_CHECK_EN);
+  i2c_cmd = i2c_cmd_link_create();
+  if(i2c_cmd == NULL){
+    printf("i2c command null.\n");
+    return 1;
+  }
+  i2c_master_start(i2c_cmd);
 
-  if((i2c_mode == I2C_FLAG_WRITE) && buffer_1 != NULL){
-      i2c_master_write(i2c_cmd, buffer_1, buffer_1_len, ACK_CHECK_EN);
+  if(i2c_mode == I2C_FLAG_WRITE){
+      addr_byte = (i2c_slave_addr << 1) | I2C_WRITE_MASK;
+  }else if(i2c_mode == I2C_FLAG_READ){
+      addr_byte = (i2c_slave_addr << 1) | I2C_READ_MASK;
   }else{
-      i2c_master_read(i2c_cmd, buffer_1, buffer_1_len, I2C_MASTER_LAST_NACK);
+    printf("unknown operation mode.\n");
+    i2c_cmd_link_delete(i2c_cmd);
+    return ESP_FAIL;
+  }
+
+  if((i2c_mode == I2C_FLAG_WRITE) && buffer != NULL){
+      //printf("<Writting buffer addr>.\n");
+      i2c_master_write_byte(i2c_cmd, addr_byte, ACK_CHECK_EN);
+      //printf("<Writting buffer , len %d>.\n", buffer_len);
+      i2c_master_write(i2c_cmd, buffer, buffer_len, ACK_CHECK_EN);
+  }else if((i2c_mode == I2C_FLAG_READ) && buffer != NULL){
+      //printf("<Writting buffer addr>.\n");
+      i2c_master_write_byte(i2c_cmd, addr_byte, ACK_CHECK_EN);
+      //printf("<Reading buffer , len %d>.\n", buffer_len);
+      i2c_master_read(i2c_cmd, buffer, buffer_len, I2C_MASTER_LAST_NACK);
+  }else{
+    printf("No buffer, canceling transaction.\n");
+    i2c_cmd_link_delete(i2c_cmd);
+    return ESP_FAIL;
   }
 
   i2c_master_stop(i2c_cmd);
 
-  esp_err_t ret = i2c_master_cmd_begin(I2C_NUM_1, i2c_cmd, 1000 / portTICK_RATE_MS);
+  ret = i2c_master_cmd_begin(I2C_NUM_1, i2c_cmd, 1000 / portTICK_RATE_MS);
   i2c_cmd_link_delete(i2c_cmd);
 
   if(ret != ESP_OK){
@@ -100,38 +136,19 @@ static inline esp_err_t _i2c_com_master_transfer(uint8_t i2c_slave_addr, uint16_
 }
 
 esp_err_t i2c_com_write_register(uint8_t i2c_slave_addr, uint8_t reg_addr, uint8_t *write_buf, uint16_t write_buf_len){
-  uint8_t reg_buffer[1];
-  esp_err_t i2c_trans_res;
-
-  reg_buffer[0] = reg_addr;
 
   gpio_set_level(I2C_WAKEUP_GPIO, 1);
   I2C_WAKEUP;
   gpio_set_level(I2C_WAKEUP_GPIO, 0);
 
-  i2c_trans_res = _i2c_com_master_transfer(i2c_slave_addr, I2C_FLAG_WRITE, reg_buffer,1, NULL, 0);
-  if(i2c_trans_res != ESP_OK){
-    return ESP_FAIL;
-  }
-
-  return _i2c_com_master_transfer(i2c_slave_addr, I2C_FLAG_WRITE, write_buf, write_buf_len, NULL, 0);
+  return _i2c_com_master_transfer(i2c_slave_addr, I2C_FLAG_WRITE, reg_addr, write_buf, write_buf_len);
 }
 
 esp_err_t i2c_com_read_register(uint8_t i2c_slave_addr, uint8_t reg_addr, uint8_t *read_buf, uint16_t read_buf_len){
-  uint8_t reg_buffer[1];
-  esp_err_t i2c_trans_res;
-
-  reg_buffer[0] = reg_addr;
 
   gpio_set_level(I2C_WAKEUP_GPIO, 1);
   I2C_WAKEUP;
   gpio_set_level(I2C_WAKEUP_GPIO, 0);
 
-  i2c_trans_res = _i2c_com_master_transfer(i2c_slave_addr, I2C_FLAG_WRITE, reg_buffer,1, NULL, 0);
-  if(i2c_trans_res != ESP_OK){
-    return ESP_FAIL;
-  }
-
-  return _i2c_com_master_transfer(i2c_slave_addr, I2C_FLAG_READ, read_buf, read_buf_len, NULL, 0);
-
+  return _i2c_com_master_transfer(i2c_slave_addr, I2C_FLAG_READ, reg_addr, read_buf, read_buf_len);
 }

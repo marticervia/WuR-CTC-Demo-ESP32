@@ -102,7 +102,7 @@ static IRAM_ATTR void _send_byte_legacy_wlan(wlan_wur_ctxt_t *wur_ctxt, uint8_t 
         }else{
         	CLEAR_OUTPUT;
         }
-        cdelay(925);
+        cdelay(928);
 #endif
     }
 }
