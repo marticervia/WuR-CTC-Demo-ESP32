@@ -19,7 +19,7 @@
 #define I2C_SCL 21
 #define I2C_SDA 22 
 
-#define I2C_MASTER_FREQ_HZ 600000
+#define I2C_MASTER_FREQ_HZ 500000
 
 #define I2C_CLOCK_DELAY 20 //micros
 #define I2C_START_DELAY 20 //micros
@@ -50,9 +50,9 @@ void i2c_com_init(void){
   i2c_config_t conf;
   conf.mode = I2C_MODE_MASTER;
   conf.sda_io_num = I2C_SDA;
-  conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
+  conf.sda_pullup_en = GPIO_PULLUP_DISABLE;
   conf.scl_io_num = I2C_SCL;
-  conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
+  conf.scl_pullup_en = GPIO_PULLUP_DISABLE;
   conf.master.clk_speed = I2C_MASTER_FREQ_HZ;
   i2c_param_config(i2c_master_port, &conf);
   i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0);
