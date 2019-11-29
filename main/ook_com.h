@@ -24,8 +24,8 @@
 #define WLAN_RECV_ADDR_OFFSET 4
 #define WLAN_TRAN_ADDR_OFFSET 10
 
-#define ESP_CUSTOM_POWER_6M 127
-#define ESP_CUSTOM_POWER_24M 127
+#define ESP_CUSTOM_POWER_6M 18
+#define ESP_CUSTOM_POWER_24M 18
 
 typedef enum symbol_size{
 	WUR_SIZE_6M = 24,

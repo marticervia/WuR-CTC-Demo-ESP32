@@ -76,7 +76,7 @@ static ook_tx_errors_t _ook_wur_transmit(uint8_t* data, uint8_t len){
 
 
 void ook_wur_init(void){
-	wlan_wur_init_context(&wlan_wur_ctxt, 0x0f, WUR_SIZE_24M);
+	wlan_wur_init_context(&wlan_wur_ctxt, 0x0f, WUR_SIZE_6M);
 }
 
 ook_tx_errors_t ook_wur_wake(uint16_t dest, uint16_t ms_wake, uint8_t seq){

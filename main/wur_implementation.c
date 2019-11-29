@@ -31,7 +31,7 @@
 
 #define TAG "APP"
 #define ESP_WIFI_SSID      "wng_wifi"
-#define ESP_WIFI_PASS      "yeuyeuyeu"
+#define ESP_WIFI_PASS      ""
 
 static app_ctxt_t app_ctxt;
 static SemaphoreHandle_t app_mutex;
@@ -442,6 +442,7 @@ void WuRAppTick(void){
                     printf("[%d]: Failure to send Wake Device REQ!\n", current_timestamp);
                     _respondWithError(APP_TRANS_KO_TX);
                     app_ctxt.app_status = APP_IDLE;
+                    break;
                 }
                 app_ctxt.app_status = APP_WAITING_WAKE;
                 break;
@@ -454,6 +455,7 @@ void WuRAppTick(void){
                     printf("[%d]: Failure to send Data to Device REQ!\n", current_timestamp);
                     _respondWithError(APP_TRANS_KO_TX);
                     app_ctxt.app_status = APP_IDLE;
+                    break;
                 }
                 app_ctxt.app_status = APP_WAITING_DATA;
                 break;

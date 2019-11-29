@@ -4,7 +4,7 @@
 #include "nvs_flash.h"
 
 #define TAG "WLAN_RAW"
-#define USE_GPIO
+//#define USE_GPIO
 
 #ifdef USE_GPIO
 #define OUTPUT_GPIO GPIO_NUM_4
@@ -329,13 +329,18 @@ esp_err_t IRAM_ATTR wlan_wur_transmit_frame(wlan_wur_ctxt_t *wur_context, uint8_
 		_send_byte_legacy_wlan(wur_context, data_bytes[i]);
 	}
 
+	print_wlan_frame(wur_context->frame_buffer, wur_context->current_len);
+	print_wlan_frame(wur_context->scrambler_buffer, wur_context->current_len);
+
 #ifndef USE_GPIO
-    int32_t res = esp_wifi_internal_tx(ESP_IF_WIFI_STA, wur_context->frame_buffer, wur_context->current_len);
-    if(res != ESP_OK){
-        printf("Failed to sand frame of len %d because of %d.\n", wur_context->current_len, res);
-        return ESP_FAIL;
-    }
-    printf("Successfully sent frame of len %d!\n", wur_context->current_len);
+	for(int ii = 0; ii < 500; ii++){
+		int32_t res = esp_wifi_internal_tx(ESP_IF_WIFI_STA, wur_context->frame_buffer, wur_context->current_len);
+		if(res != ESP_OK){
+			printf("Failed to sand frame of len %d because of %d.\n", wur_context->current_len, res);
+		}
+		vTaskDelay(10);
+		printf("Successfully sent frame of len %d!\n", wur_context->current_len);
+	}
 #else
     CLEAR_OUTPUT;
     portEXIT_CRITICAL(&wlanGroupMux);
