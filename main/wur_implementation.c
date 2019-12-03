@@ -365,7 +365,6 @@ httpd_uri_t uri_data = {
 };
 
 void WuRInitApp(void){
-    wur_init(WUR_ADDR);
 
     s_wifi_event_group = xEventGroupCreate();
     nvs_flash_init();
@@ -391,6 +390,8 @@ void WuRInitApp(void){
     ESP_LOGI(TAG, "Waiting for AP connection...");
     xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
     ESP_LOGI(TAG, "Connected to AP");
+
+    wur_init(WUR_ADDR);
 
     app_ctxt.app_status = APP_IDLE;
     memset(app_ctxt.app_data_buf, 0, MAX_APP_DATA_BUF);

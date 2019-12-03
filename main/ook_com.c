@@ -109,7 +109,10 @@ static IRAM_ATTR void _send_byte_legacy_wlan(wlan_wur_ctxt_t *wur_ctxt, uint8_t 
 
 static esp_err_t set_wifi_fixed_rate(wifi_phy_rate_t value)
 {
-    return esp_wifi_internal_set_fix_rate(ESP_IF_WIFI_STA, true, value);
+	esp_err_t err;
+    err = esp_wifi_internal_set_fix_rate(ESP_IF_WIFI_STA, true, value);
+	printf("ESP_fixed rate returns 0x%x", err);
+	return err;
 }
 
 static void print_wlan_frame(uint8_t* frame, uint16_t frame_len){
@@ -237,43 +240,16 @@ esp_err_t wlan_wur_init_context(wlan_wur_ctxt_t *wur_context, uint8_t initial_st
 			printf("Rate still not supported!\n");
 			return ESP_ERR_INVALID_ARG;
 	}
-#else
-	gpio_pad_select_gpio(OUTPUT_GPIO);
-    /* Set the GPIO as a push/pull output */
-    gpio_set_direction(OUTPUT_GPIO, GPIO_MODE_OUTPUT);
-#endif
-    return ESP_OK;
-}
 
-
-esp_err_t wlan_wur_init_frame(wlan_wur_ctxt_t *wur_context){
-	uint8_t l_Mac[6];
-	wur_context->current_len = 0;
 	memset(wur_context->scrambler_buffer, 0, WLAN_TOTAL_BYTES);
-
 	wur_context->current_scrambler_state = wur_context->initial_scrambler_state;
 	printf("Innitializing frame with scrambler state 0x%02X.\n", wur_context->current_scrambler_state);
 
-	esp_wifi_get_mac(ESP_IF_WIFI_STA, l_Mac);
+	uint8_t symbol_bytes = wur_context->symbol_len/8;
 
-	switch(wur_context->symbol_len){
-		case WUR_SIZE_6M:
-			printf("Filling with zeros!\n");
-			memset(wur_context->frame_buffer, 0, WLAN_TOTAL_BYTES);
-			break;
-		case WUR_SIZE_24M:
-			printf("Filling with ones!\n");
-			memset(wur_context->frame_buffer, 0xff, WLAN_TOTAL_BYTES);
-			break;
-		default:
-			printf("Rate still not supported!\n");
-			return ESP_ERR_INVALID_ARG;
-	}
-
-
-	uint8_t symbol_size = wur_context->symbol_len/8;
-	uint8_t padding_bytes = (symbol_size - ((SIGNAL_FIELD_BYTES + WLAN_HEADERS_BYTES) % symbol_size)) % symbol_size;
-	printf("Using %d Padding bytes for a symbol size of %d bytes.\n", padding_bytes, symbol_size);
+	/* get the padding byte number to align payload to OFDM symbol start boundary*/
+	uint8_t padding_bytes = (symbol_bytes - ((SIGNAL_FIELD_BYTES + WLAN_HEADERS_BYTES) % symbol_bytes)) % symbol_bytes;
+	printf("Using %d Padding bytes for a symbol size of %d bytes.\n", padding_bytes, symbol_bytes);
 
 	uint16_t total_offset_bits = 9 + ((WLAN_HEADERS_BYTES + padding_bytes)*8);
 	/* advance the scrambler state to include the SIGNAL field and the non settable byts of the header*/
@@ -288,21 +264,44 @@ esp_err_t wlan_wur_init_frame(wlan_wur_ctxt_t *wur_context){
 	wur_context->current_scrambler_state = scrambler_state;
 	printf("Current scrambler state is 0x%02X.\n", wur_context->current_scrambler_state);
 
-	/* set the header data apropiately*/
-	memcpy(wur_context->frame_buffer, standard_wlan_headers, WLAN_SETABLE_BYTES);
-	wur_context->current_len += WLAN_SETABLE_BYTES;
-
-	printf("Prepared MAC headers.\n");
-
-	/* get the padding byte number to align payload to OFDM symbol start boundary*/
-	/* Create the scrambler values for the frame*/
-	/* signal field bytes are scrambled but are not part of the MPDU*/
-	memset(&wur_context->frame_buffer[wur_context->current_len], 0, padding_bytes);
-	wur_context->current_len += padding_bytes;
-
 	/* Create the scrambler values for the whole frame*/
 	/* signal field bytes are scrambled but are not part of the MPDU*/
 	scramble_bytes(wur_context, WLAN_TOTAL_BYTES, wur_context->scrambler_buffer);
+	memset(&wur_context->frame_buffer[wur_context->current_len], 0, padding_bytes);
+
+	wur_context->padding_bytes = padding_bytes;
+#else
+	gpio_pad_select_gpio(OUTPUT_GPIO);
+    /* Set the GPIO as a push/pull output */
+    gpio_set_direction(OUTPUT_GPIO, GPIO_MODE_OUTPUT);
+#endif
+    return ESP_OK;
+}
+
+
+esp_err_t wlan_wur_init_frame(wlan_wur_ctxt_t *wur_context){
+	uint8_t l_Mac[6];
+	wur_context->current_len = 0;
+
+	esp_wifi_get_mac(ESP_IF_WIFI_STA, l_Mac);
+
+	switch(wur_context->symbol_len){
+		case WUR_SIZE_6M:
+			memset(wur_context->frame_buffer, 0, WLAN_TOTAL_BYTES);
+			break;
+		case WUR_SIZE_24M:
+			memset(wur_context->frame_buffer, 0xff, WLAN_TOTAL_BYTES);
+			break;
+		default:
+			printf("Rate still not supported!\n");
+			return ESP_ERR_INVALID_ARG;
+	}
+
+	/* set the header data apropiately*/
+	memcpy(wur_context->frame_buffer, standard_wlan_headers, WLAN_SETABLE_BYTES);
+	wur_context->current_len += WLAN_SETABLE_BYTES;
+	/* signal field bytes are scrambled but are not part of the MPDU*/
+	wur_context->current_len += wur_context->padding_bytes;
 
 	return ESP_OK;
 }
@@ -329,18 +328,15 @@ esp_err_t IRAM_ATTR wlan_wur_transmit_frame(wlan_wur_ctxt_t *wur_context, uint8_
 		_send_byte_legacy_wlan(wur_context, data_bytes[i]);
 	}
 
-	print_wlan_frame(wur_context->frame_buffer, wur_context->current_len);
-	print_wlan_frame(wur_context->scrambler_buffer, wur_context->current_len);
+	//print_wlan_frame(wur_context->frame_buffer, wur_context->current_len);
+	//print_wlan_frame(wur_context->scrambler_buffer, wur_context->current_len);
 
 #ifndef USE_GPIO
-	for(int ii = 0; ii < 500; ii++){
-		int32_t res = esp_wifi_internal_tx(ESP_IF_WIFI_STA, wur_context->frame_buffer, wur_context->current_len);
-		if(res != ESP_OK){
-			printf("Failed to sand frame of len %d because of %d.\n", wur_context->current_len, res);
-		}
-		vTaskDelay(10);
-		printf("Successfully sent frame of len %d!\n", wur_context->current_len);
+	int32_t res = esp_wifi_internal_tx(ESP_IF_WIFI_STA, wur_context->frame_buffer, wur_context->current_len);
+	if(res != ESP_OK){
+		printf("Failed to sand frame of len %d because of %d.\n", wur_context->current_len, res);
 	}
+	printf("Successfully sent frame of len %d!\n", wur_context->current_len);
 #else
     CLEAR_OUTPUT;
     portEXIT_CRITICAL(&wlanGroupMux);

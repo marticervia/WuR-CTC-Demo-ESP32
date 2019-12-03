@@ -59,6 +59,7 @@ static ook_tx_errors_t _ook_wur_transmit(uint8_t* data, uint8_t len){
 	}
 	printf("%02X\n", data[i]);
 	*/
+
 	crc8 = _ook_calculate_crc8(data, len - 1);
 	//printf("Got CRC of %02X.\n", crc8);
 	data[len-1] = crc8; 

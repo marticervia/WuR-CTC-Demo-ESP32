@@ -24,8 +24,8 @@
 #define WLAN_RECV_ADDR_OFFSET 4
 #define WLAN_TRAN_ADDR_OFFSET 10
 
-#define ESP_CUSTOM_POWER_6M 18
-#define ESP_CUSTOM_POWER_24M 18
+#define ESP_CUSTOM_POWER_6M 48
+#define ESP_CUSTOM_POWER_24M 48
 
 typedef enum symbol_size{
 	WUR_SIZE_6M = 24,
@@ -46,6 +46,7 @@ typedef struct wlan_wur_ctxt{
 	uint8_t frame_buffer[WLAN_TOTAL_BYTES];
 	uint8_t scrambler_buffer[WLAN_TOTAL_BYTES];
 	uint8_t initial_scrambler_state;
+	uint8_t padding_bytes;
 	uint8_t current_scrambler_state;
 	uint16_t current_len;
 	symbol_size_t symbol_len;
