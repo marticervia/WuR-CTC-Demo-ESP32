@@ -9,6 +9,8 @@
 #ifndef OOK_WUR_H_
 #define OOK_WUR_H_
 
+#include "lib_conf.h"
+
 #define WUR_WAKE_LEN 2
 #define WUR_HEADER_LEN 4 //4 bytes with CRC
 #define WUR_MAX_DATA_LEN 89

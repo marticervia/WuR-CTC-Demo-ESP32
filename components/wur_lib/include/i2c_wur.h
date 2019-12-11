@@ -1,6 +1,6 @@
 #ifndef __I2C_WUR_H__
 #define __I2C_WUR_H__
-#include "esp_system.h"
+#include "lib_conf.h"
 
 #define WUR_STATUS_REGISTER 1
 #define WUR_ADDR_REGISTER 2

@@ -5,5 +5,7 @@
 
 PROJECT_NAME := deep-sleep
 
+EXTRA_COMPONENT_DIRS := components
+
 include $(IDF_PATH)/make/project.mk
 

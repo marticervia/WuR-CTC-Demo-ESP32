@@ -4,16 +4,13 @@
  *  Created on: 29 jul. 2019
  *      Author: marti
  */
-#include "esp_system.h"
+#include "lib_conf.h"
 
 #include "wur.h"
 #include "ook_wur.h"
 #include "i2c_wur.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
 #include "utils.h"
 #include <string.h>
-#include "esp_wifi.h"
 
 #define ESP_INTR_FLAG_DEFAULT 0
 
@@ -39,9 +36,11 @@ typedef struct wur_context{
 
 static wur_context_t wur_context;
 static volatile uint8_t wur_op_pending;
-static SemaphoreHandle_t wur_semaphore;
-static SemaphoreHandle_t wur_mutex;
 
+static WuRBinarySemaphoreHandle_t wur_semaphore;
+static WuRRecursiveMutexHandle_t wur_mutex;
+
+#ifdef USE_ESP_VERSION
 /* handles the interruption genrated by the WUR GPIO pin. */
 static IRAM_ATTR void wur_int_handler(void* arg)
 {
@@ -53,7 +52,9 @@ static IRAM_ATTR void wur_int_handler(void* arg)
 		portYIELD_FROM_ISR();
     }
 }
+#endif
 
+#ifdef USE_FREERTOS
 static void wur_tick_task(void* args){
 	printf("Wur Tick task started!\n");
 	while(1){
@@ -61,9 +62,11 @@ static void wur_tick_task(void* args){
 		wur_tick(tick);
 	}
 }
-
+#endif
 
 void wur_init(uint16_t addr){
+
+#ifdef USE_ESP_VERSION
     gpio_config_t io_conf;
 
     io_conf.intr_type = GPIO_PIN_INTR_POSEDGE;
@@ -78,13 +81,13 @@ void wur_init(uint16_t addr){
     gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
     //hook isr handler for specific gpio pin
     gpio_isr_handler_add(GPIO_WAKE, wur_int_handler, (void*) GPIO_WAKE);
+#endif
 
-    wur_semaphore = xSemaphoreCreateBinary();
-    xSemaphoreGive(wur_semaphore);
+    wur_semaphore = WuRBinarySemaphoreCreate();
+    WuRBinarySemaphoreGive(wur_semaphore);
 
-    wur_mutex = xSemaphoreCreateRecursiveMutex();
-    xSemaphoreGiveRecursive(wur_mutex);
-
+    wur_mutex = WuRRecursiveMutexCreate();
+    WuRRecursiveMutexGive(wur_mutex);
 
 	ook_wur_init();
 	wur_i2c_init();
@@ -128,9 +131,10 @@ void wur_tick(uint32_t systick){
 		}
 		else{
 			uint32_t remaining_time = WUR_WAKE_TIMEOUT - (systick - wur_context.tx_timestamp);
+			
 			xSemaphoreGiveRecursive(wur_mutex);
-			xSemaphoreTake(wur_semaphore, remaining_time/portTICK_PERIOD_MS);
-			xSemaphoreTakeRecursive(wur_mutex, portMAX_DELAY);
+			xSemaphoreTake(wur_semaphore, remaining_time/WuRTickPeriodMS);
+			xSemaphoreTakeRecursive(wur_mutex, WuRTickPeriodMS);
 		}
 	}else if(wur_context.wur_status == WUR_STATUS_WAIT_WAKE_ACK){
 		if(systick - wur_context.tx_timestamp > WUR_WAKE_TIMEOUT){
@@ -146,14 +150,14 @@ void wur_tick(uint32_t systick){
 		else{
 			uint32_t remaining_time = WUR_WAKE_TIMEOUT - (systick - wur_context.tx_timestamp);
 			xSemaphoreGiveRecursive(wur_mutex);
-			xSemaphoreTake(wur_semaphore, remaining_time/portTICK_PERIOD_MS);
-			xSemaphoreTakeRecursive(wur_mutex, portMAX_DELAY);
+			xSemaphoreTake(wur_semaphore, remaining_time/WuRTickPeriodMS);
+			xSemaphoreTakeRecursive(wur_mutex, WuRTickPeriodMS);
 
 		}
 	}else{
 		xSemaphoreGiveRecursive(wur_mutex);
-		xSemaphoreTake(wur_semaphore, WUR_DEFAULT_TIMEOUT/portTICK_PERIOD_MS);
-		xSemaphoreTakeRecursive(wur_mutex, portMAX_DELAY);
+		xSemaphoreTake(wur_semaphore, WUR_DEFAULT_TIMEOUT/WuRTickPeriodMS);
+		xSemaphoreTakeRecursive(wur_mutex, WuRTickPeriodMS);
 	}
 
 	if(!wur_op_pending){
@@ -243,7 +247,7 @@ wur_tx_res_t wur_send_wake(uint16_t addr, uint16_t ms){
 	ook_tx_errors_t tx_res;
 	wur_tx_res_t res;
 
-	xSemaphoreTakeRecursive(wur_mutex, portMAX_DELAY);
+	xSemaphoreTakeRecursive(wur_mutex, WuRTickPeriodMS);
 
 	if(wur_context.wur_status != WUR_STATUS_IDLE){
 		res = WUR_ERROR_TX_BUSY;
@@ -271,7 +275,7 @@ wur_tx_res_t wur_send_data(uint16_t addr, uint8_t* data, uint8_t data_len, uint8
 	ook_tx_errors_t tx_res;
 	wur_tx_res_t res;
 
-	xSemaphoreTakeRecursive(wur_mutex, portMAX_DELAY);
+	xSemaphoreTakeRecursive(wur_mutex, WuRTickPeriodMS);
 
 	if(wur_context.wur_status != WUR_STATUS_IDLE){
 		res = WUR_ERROR_TX_BUSY;
@@ -305,7 +309,7 @@ wur_tx_res_t wur_send_ack(uint16_t addr, int8_t ack_seq_num){
 	wur_tx_res_t res;
 	//printf("Sending WuR ACK!\n");
 
-	xSemaphoreTakeRecursive(wur_mutex, portMAX_DELAY);
+	xSemaphoreTakeRecursive(wur_mutex, WuRTickPeriodMS);
 
 	if(ack_seq_num < 0){
 		ack_seq_num = wur_context.expected_seq_num;

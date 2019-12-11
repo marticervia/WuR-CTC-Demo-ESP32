@@ -1,4 +1,10 @@
-#include "esp_system.h"
+
+#include "lib_conf.h"
+
+/* ESP 32 I2C coms implementation*/
+
+#ifdef USE_ESP_VERSION
+
 #include "utils.h"
 #include <sys/time.h>
 
@@ -17,3 +23,5 @@ void print_frame(uint8_t* buffer, uint8_t buffer_len){
 	}
 	printf("%02X\n", buffer[i]);
 }
+
+#endif

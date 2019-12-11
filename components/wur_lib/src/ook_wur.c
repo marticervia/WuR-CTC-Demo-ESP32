@@ -6,7 +6,7 @@
  *      Author: marti
  */
 
-#include "esp_system.h"
+#include "lib_conf.h"
 
 #include "ook_com.h"
 #include "ook_wur.h"
@@ -14,8 +14,6 @@
 
 #include <string.h>
 
-
-static wlan_wur_ctxt_t wlan_wur_ctxt;
 
 static const uint8_t crc8_table[] = {
       0, 94,188,226, 97, 63,221,131,194,156,126, 32,163,253, 31, 65,
@@ -48,7 +46,7 @@ static uint8_t _ook_calculate_crc8(uint8_t* payload, uint8_t payload_len){
 }
 
 static ook_tx_errors_t _ook_wur_transmit(uint8_t* data, uint8_t len){
-	esp_err_t esp_res;
+	wur_errors_t wur_res;
 	uint8_t crc8;
 	uint16_t i;
 
@@ -67,8 +65,8 @@ static ook_tx_errors_t _ook_wur_transmit(uint8_t* data, uint8_t len){
 	//printf("Send frame:\n");
 	//print_frame(data, len);
 
-	esp_res = wlan_wur_transmit_frame(&wlan_wur_ctxt, data, len);
-	if(esp_res != ESP_OK){
+	wur_res = ook_wur_transmit_frame(data, len);
+	if(wur_res != WUR_OK){
 		return OOK_WUR_TX_ERROR_FAILED;
 	}
 
@@ -77,7 +75,7 @@ static ook_tx_errors_t _ook_wur_transmit(uint8_t* data, uint8_t len){
 
 
 void ook_wur_init(void){
-	wlan_wur_init_context(&wlan_wur_ctxt, 0x0f, WUR_SIZE_6M);
+	ook_wur_init_context();
 }
 
 ook_tx_errors_t ook_wur_wake(uint16_t dest, uint16_t ms_wake, uint8_t seq){

@@ -1,8 +1,7 @@
 #ifndef __I2C_H__
 #define __I2C_H__
-#include "esp_system.h"
 
-#define I2C_WAKEUP_GPIO GPIO_NUM_19
+#include "lib_conf.h"
 
 #define I2C_FLAG_WRITE          0x0001
 #define I2C_FLAG_READ           0x0002

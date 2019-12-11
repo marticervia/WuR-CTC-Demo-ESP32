@@ -5,8 +5,11 @@
  *      Author: marti
  */
 
-#include "esp_system.h"
-#include "driver/i2c.h"
+#include "lib_conf.h"
+
+/* ESP 32 I2C coms implementation*/
+
+#ifdef USE_ESP_VERSION
 
 #include "i2c_com.h"
 #include "string.h"
@@ -152,3 +155,5 @@ esp_err_t i2c_com_read_register(uint8_t i2c_slave_addr, uint8_t reg_addr, uint8_
 
   return _i2c_com_master_transfer(i2c_slave_addr, I2C_FLAG_READ, reg_addr, read_buf, read_buf_len);
 }
+
+#endif
