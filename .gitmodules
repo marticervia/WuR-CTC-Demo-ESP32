@@ -1,3 +1,6 @@
 [submodule ".vscode"]
 	path = .vscode
 	url = https://github.com/pathob/.vscode-esp32.git
+[submodule "components/wur_lib"]
+	path = components/wur_lib
+	url = ssh://git@mandypu.duckdns.org:22051/tesi/wur_lib.git
