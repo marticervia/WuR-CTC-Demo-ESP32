@@ -34,6 +34,7 @@
 #define ESP_WIFI_PASS      ""
 
 static app_ctxt_t app_ctxt;
+static test_ctxt_t test_ctxt;
 static SemaphoreHandle_t app_mutex;
 static SemaphoreHandle_t app_semaphore;
 static SemaphoreHandle_t http_semaphore;
@@ -79,6 +80,7 @@ esp_err_t WuRServeIndex(httpd_req_t *req){
     ESP_LOGI(TAG,"Sent response with size %d with code %d", size, res);
     return ESP_OK;
 }
+
 
 /* wur related handlers */
 esp_err_t WuRWakeDevice(httpd_req_t *req){
@@ -238,6 +240,80 @@ esp_err_t WuRRequestDevice(httpd_req_t *req){
     return ESP_OK;
 }
 
+esp_err_t WuRStartTest(httpd_req_t *req){
+    esp_err_t res;
+    uint8_t frame_buff[128];
+
+    ESP_LOGI(TAG,"Received /test/start request");
+    uint32_t current_timestamp = get_timestamp_ms();
+
+    if(test_ctxt.test_status == TEST_IN_PROGRESS){
+        httpd_resp_send_500(req);
+    }
+
+    init_test_context(&test_ctxt);
+    app_ctxt.app_status = APP_SENDING_DATA;
+    xSemaphoreGive(app_semaphore);
+
+    return ESP_OK;
+}
+
+esp_err_t WuRReportTest(httpd_req_t *req){
+    esp_err_t res;
+    ESP_LOGI(TAG,"Received /test/status request");
+    uint32_t current_timestamp = get_timestamp_ms();
+
+    ESP_LOGI(TAG,"Sent response with size %d with code %d", size, res);
+    return ESP_OK;
+}
+
+
+static void init_test_context(test_ctxt_t* ctxt){
+    ctxt->start_timestamp = get_timestamp_ms();
+    ctxt->current_frame = 0;
+    ctxt->total_frames = TOTAL_TEST_FRAMES;
+    ctxt->KO_frames= 0;
+    ctxt->OK_frames = 0;
+    ctxt->test_status = TEST_IN_PROGRESS;
+    memset(ctxt->failure_reason, 0, TEST_REASON_LEN);
+}
+
+static void generate_test_frame(uint8_t* buffer, uint16_t req_len_bytes){
+    esp_fill_random(buffer, req_len_bytes);    
+}
+
+static void update_text_context(test_ctxt_t* ctxt, bool OK_result){
+    ctxt->current_frame++;
+    if(OK_result){
+        ctxt->OK_frames++;
+    }
+    else{
+        ctxt->KO_frames++;
+    }
+    if(ctxt->current_frame == ctxt->total_frames){
+        aprove_test_context(ctxt);
+    }    
+}
+
+static void fail_test_context(test_ctxt_t* ctxt, char* reason, uint32_t fail_timestamp){
+    ctxt->test_status = TEST_FAILED;
+    strcpy(ctxt->failure_reason, reason);
+    ctxt->finish_timestamp = fail_timestamp;
+    printf("[%d]: Finished test with failure on frame: %d/%d !\n", fail_timestamp, test_ctxt.current_frame, test_ctxt.total_frames);
+    printf("[%d]: Test run in %d milliseconds!\n", fail_timestamp, test_ctxt.finish_timestamp - test_ctxt.start_timestamp);
+    app_ctxt.app_status = APP_IDLE;
+
+}
+
+static void aprove_test_context(test_ctxt_t* ctxt, uint32_t success_timestamp){
+    ctxt->test_status = TEST_FINISHED;
+    ctxt->finish_timestamp = success_timestamp;
+    printf("[%d]: Finished test with results: %d/%d !\n", current_timestamp, test_ctxt.OK_frames, test_ctxt.total_frames);
+    printf("[%d]: Test run in %d milliseconds!\n", current_timestamp, test_ctxt.finish_timestamp - test_ctxt.start_timestamp);
+    uint32_t bitrate = (test_ctxt.total_frames * TEST_FRAME_SIZE * 8) / ((test_ctxt.finish_timestamp - test_ctxt.start_timestamp)/1000);
+    printf("[%d]: Calculated bitrate is: %d !\n", current_timestamp, bitrate);
+    app_ctxt.app_status = APP_IDLE;
+}
 
 static inline uint16_t _getuint16t(uint8_t* buff){
     uint16_t wur_addr;
@@ -364,6 +440,24 @@ httpd_uri_t uri_data = {
     .user_ctx = NULL
 };
 
+/* URI handler structure for POST /uri */
+httpd_uri_t uri_test_start = {
+    .uri      = "/wur/test/start",
+    .method   = HTTP_POST,
+    .handler  = WuRStartTest,
+    .user_ctx = NULL
+};
+
+/* URI handler structure for POST /uri */
+httpd_uri_t uri_test_status = {
+    .uri      = "/wur/test/status",
+    .method   = HTTP_GET,
+    .handler  = WuRReportTest,
+    .user_ctx = NULL
+};
+
+
+
 void WuRInitApp(void){
 
     s_wifi_event_group = xEventGroupCreate();
@@ -419,6 +513,8 @@ void WuRInitApp(void){
     }
 }
 
+uint8_t test_data_buf[TEST_FRAME_SIZE];
+
 void WuRAppTick(void){
     
     /* Unblocked by USER actions to send WAKE, DATA and their responses*/
@@ -433,6 +529,12 @@ void WuRAppTick(void){
             case APP_IDLE:
                 printf("[%d]: Device IDLE\n", current_timestamp);
                 break;
+
+            case TEST_GENERATE_FRAME:
+                generate_test_frame(test_data_buf, TEST_FRAME_SIZE);
+                app_ctxt.app_status = TEST_SEND_FRAME;
+                break;
+
             case APP_SENDING_WAKE:
                 printf("[%d]: Sending Wake Device REQ!\n", current_timestamp);
                 wur_addr = _getuint16t(app_ctxt.app_data_buf);
@@ -449,6 +551,23 @@ void WuRAppTick(void){
                 }
                 app_ctxt.app_status = APP_WAITING_WAKE;
                 break;
+
+            case TEST_SEND_FRAME:
+                printf("[%d]: Sending Data to Device test, frame %d/%d!\n", current_timestamp, test_ctxt.current_frame, test_ctxt.total_frames);
+                wur_addr = _getuint16t(app_ctxt.app_data_buf);
+                wur_addr = wur_addr & (0x03FF);
+                generate_test_frame(test_data_buf, TEST_FRAME_SIZE);
+                tx_res = wur_send_data(wur_addr, &test_data_buf, TEST_FRAME_SIZE, false, -1);
+                if(tx_res != WUR_ERROR_TX_OK){
+                    printf("[%d]: Failure to send Data to Device REQ!\n", current_timestamp);
+                    update_text_context(&test_ctxt, false);
+                    app_ctxt.app_status = TEST_GENERATE_FRAME;
+                    vTaskDelay(10);
+                }else{
+                    app_ctxt.app_status = TEST_WAIT_FRAME;
+                }
+                break;
+
             case APP_SENDING_DATA:
                 printf("[%d]: Sending Data to Device REQ!\n", current_timestamp);
                 wur_addr = _getuint16t(app_ctxt.app_data_buf);
@@ -463,6 +582,7 @@ void WuRAppTick(void){
                 }
                 app_ctxt.app_status = APP_WAITING_DATA;
                 break;
+
             case APP_WAITING_WAKE:
             case APP_WAITING_DATA:
                 /* wait for the OK/KO Tx callback to change the state*/
@@ -470,16 +590,39 @@ void WuRAppTick(void){
                     printf("[%d]: Device Waiting ACK\n", current_timestamp);
                 }
                 break;
+
+            case TEST_WAIT_FRAME:
+                break;
+
             case APP_RESPONDING_WAKE:
                 //printf("[%d]: Sending Response to Wake Device REQ!\n", current_timestamp);
                 _respondWithPayload(NULL, 0);
                 app_ctxt.app_status = APP_IDLE;
                 break;
+
             case APP_RESPONDING_DATA:
                 //printf("[%d]: Sending Response to Data to Device REQ!\n", current_timestamp);
                 _respondWithPayload(app_ctxt.app_data_buf, app_ctxt.app_data_buf_len );
                 app_ctxt.app_status = APP_IDLE;
                 break;
+
+            case TEST_COMPLETE_OK_FRAME:
+                update_text_context(&test_ctxt, true);
+                if(test_ctxt.test_status == TEST_IN_PROGRESS){
+                    app_ctxt.app_status = TEST_GENERATE_FRAME;
+                }
+                break;
+            case TEST_COMPLETE_KO_FRAME:
+                update_text_context(&test_ctxt, false);
+                if(test_ctxt.test_status == TEST_IN_PROGRESS){
+                    app_ctxt.app_status = TEST_GENERATE_FRAME;
+                }
+                break;
+            case TEST_COMPLETE_FAILURE:
+                fail_test_context(&test_ctxt, "Error while taking the test.\n");
+                app_ctxt.app_status = APP_IDLE;
+                break;
+
             default:
                 break;
         }

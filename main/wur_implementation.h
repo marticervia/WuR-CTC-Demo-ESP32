@@ -19,7 +19,9 @@
 
 //Addr plus min payload of 1 byte
 #define MIN_DATA_REQ_LEN 3
-
+#define TOTAL_TEST_FRAMES 100
+#define TEST_REASON_LEN 128
+#define TEST_FRAME_SIZE 64
 
 typedef enum  app_status{
 	APP_IDLE = 0,
@@ -31,6 +33,13 @@ typedef enum  app_status{
 	APP_RESPONDING_DATA = 6
 }app_status_t;
 
+typedef enum  test_status{
+	TEST_IDLE = 0,
+	TEST_IN_PROGRESS = 1,
+	TEST_FAILED = 2,
+	TEST_FINISHED = 3
+}test_status_t;
+
 typedef enum  app_trans_result{
 	APP_TRANS_OK = 0,
 	APP_TRANS_KO_TX = 1,
@@ -39,15 +48,22 @@ typedef enum  app_trans_result{
 }app_trans_result_t;
 
 typedef struct app_ctxt{
-	//TODO: Use ESP_32 Native
-	/*
-	EmberCoapRequestInfo app_request_info;
-	*/
 	app_status_t 		 app_status;
 	uint8_t 		 	 app_data_buf[MAX_APP_DATA_BUF];
 	uint8_t 		 	 app_data_buf_len;
 	int16_t 			 app_response_code;
 }app_ctxt_t;
+
+typedef struct test_ctxt{
+	test_status_t 		 test_status;
+	uint16_t 		 	 total_frames;
+	uint16_t 		 	 current_frame;
+	uint16_t 			 OK_frames;
+	uint16_t 			 KO_frames;
+	uint32_t 			 start_timestamp;
+	uint32_t 			 finish_timestamp;
+	char			     failure_reason[TEST_REASON_LEN];
+}test_ctxt_t;
 
 
 esp_err_t WuRWakeDevice(httpd_req_t *req);
