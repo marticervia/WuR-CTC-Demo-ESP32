@@ -22,6 +22,8 @@
 #define TOTAL_TEST_FRAMES 100
 #define TEST_REASON_LEN 128
 #define TEST_FRAME_SIZE 64
+#define TEST_ADDR 0x0555
+#define TEST_WAKE_INTERVAL 30000
 
 typedef enum  app_status{
 	APP_IDLE = 0,
@@ -36,7 +38,9 @@ typedef enum  app_status{
 	TEST_WAIT_FRAME = 9,
 	TEST_COMPLETE_OK_FRAME = 10,
 	TEST_COMPLETE_KO_FRAME = 11,
-	TEST_COMPLETE_FAILURE = 12
+	TEST_COMPLETE_FAILURE = 12,
+	TEST_SENDING_WAKE = 13,
+	TEST_WAITING_WAKE = 14
 }app_status_t;
 
 typedef enum  test_status{
