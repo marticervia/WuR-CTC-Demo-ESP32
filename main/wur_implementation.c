@@ -271,7 +271,7 @@ static void aprove_test_context(test_ctxt_t* ctxt, uint32_t success_timestamp){
     ctxt->finish_timestamp = success_timestamp;
     printf("[%d]: Finished test with results: %d/%d !\n", success_timestamp, test_ctxt.OK_frames, test_ctxt.total_frames);
     printf("[%d]: Test run in %d milliseconds!\n", success_timestamp, test_ctxt.finish_timestamp - test_ctxt.start_timestamp);
-    uint32_t bitrate = (test_ctxt.total_frames * TEST_FRAME_SIZE * 8) / ((test_ctxt.finish_timestamp - test_ctxt.start_timestamp)/1000);
+    uint32_t bitrate = (test_ctxt.OK_frames * TEST_FRAME_SIZE * 8* 1000) / ((test_ctxt.finish_timestamp - test_ctxt.start_timestamp));
     printf("[%d]: Calculated bitrate is: %d !\n", success_timestamp, bitrate);
     app_ctxt.app_status = APP_IDLE;
 }
@@ -442,25 +442,25 @@ static void _wur_tx_cb(wur_tx_res_t tx_res){
             break;
         case TEST_WAIT_FRAME:
             if(tx_res == WUR_ERROR_TX_OK){
-                printf("[%d]: Received ACK!\n", current_timestamp);
+                //printf("[%d]: Received ACK!\n", current_timestamp);
                 app_ctxt.app_status = TEST_COMPLETE_OK_FRAME;
             }
             else if(tx_res == WUR_ERROR_TX_ACK_DATA_TIMEOUT){
-                printf("[%d]: Received NACK!\n", current_timestamp);
+                //printf("[%d]: Received NACK!\n", current_timestamp);
                 app_ctxt.app_status = TEST_COMPLETE_KO_FRAME;
             }
             else{
-                printf("[%d]: Received Error!\n", current_timestamp);
+                //printf("[%d]: Received Error!\n", current_timestamp);
                 app_ctxt.app_status = TEST_COMPLETE_FAILURE;
             }
             memset(app_ctxt.app_data_buf, 0, MAX_APP_DATA_BUF);
             app_ctxt.app_data_buf_len = 0;
             break;
         default:
-            printf("[%d]: Received ACK while not waiting. Is this an error?!\n", current_timestamp);
+            //printf("[%d]: Received ACK while not waiting. Is this an error?!\n", current_timestamp);
             break;
     }
-    printf("[%d]: TX Callback awakes APP task!!\n", current_timestamp);
+    //printf("[%d]: TX Callback awakes APP task!!\n", current_timestamp);
     xSemaphoreGiveRecursive(app_mutex);
     xSemaphoreGive(app_semaphore);
 }
@@ -654,7 +654,7 @@ void WuRAppTick(void){
                 break;
 
             case TEST_SENDING_WAKE:
-                printf("[%d]: Sending Test Wake Device REQ!\n", current_timestamp);
+                //printf("[%d]: Sending Test Wake Device REQ!\n", current_timestamp);
                 wur_addr = TEST_ADDR & (0x03FF);
                 wake_ms = TEST_WAKE_INTERVAL;
 
@@ -666,22 +666,22 @@ void WuRAppTick(void){
                     app_ctxt.app_status = TEST_COMPLETE_FAILURE;
                     break;
                 }
-                printf("[%d]: Sent Test Wake Device REQ!\n", current_timestamp);
+                //printf("[%d]: Sent Test Wake Device REQ!\n", current_timestamp);
                 break;
 
             case TEST_WAITING_WAKE:
-                printf("Waiting frame!");
+                //printf("Waiting frame!");
                 break;
 
 
             case TEST_GENERATE_FRAME:
-                printf("Generating frame!");
+                //printf("Generating frame!");
                 generate_test_frame(test_data_buf, TEST_FRAME_SIZE);
                 app_ctxt.app_status = TEST_SEND_FRAME;
                 break;
 
             case TEST_SEND_FRAME:
-                printf("[%d]: Sending Data to Device test, frame %d/%d!\n", current_timestamp, test_ctxt.current_frame, test_ctxt.total_frames);
+                //printf("[%d]: Sending Data to Device test, frame %d/%d!\n", current_timestamp, test_ctxt.current_frame, test_ctxt.total_frames);
                 wur_addr = TEST_ADDR & (0x03FF);
                 app_ctxt.app_status = TEST_WAIT_FRAME;
                 tx_res = wur_send_data(wur_addr, (uint8_t*)&test_data_buf, TEST_FRAME_SIZE, false, -1);
@@ -690,31 +690,31 @@ void WuRAppTick(void){
                     update_text_context(&test_ctxt, false);
                     app_ctxt.app_status = TEST_GENERATE_FRAME;
                 }
-                printf("[%d]: Sent Test Data Device REQ!\n", current_timestamp);
+                //printf("[%d]: Sent Test Data Device REQ!\n", current_timestamp);
                 break;
 
             case TEST_WAIT_FRAME:
-                printf("Wait Frame!");
+                //printf("Wait Frame!");
                 break;
 
             case TEST_COMPLETE_OK_FRAME:
-                printf("Frame sent OK!");
+                //printf("Frame sent OK!");
                 update_text_context(&test_ctxt, true);
                 if(test_ctxt.test_status == TEST_IN_PROGRESS){
-                    printf("Prepare next frame!");
+                    //printf("Prepare next frame!");
                     app_ctxt.app_status = TEST_GENERATE_FRAME;
                 }
                 break;
             case TEST_COMPLETE_KO_FRAME:
-                printf("Frame sent KO!");
+                //printf("Frame sent KO!");
                 update_text_context(&test_ctxt, false);
                 if(test_ctxt.test_status == TEST_IN_PROGRESS){
-                    printf("Prepare next frame!");
+                    //printf("Prepare next frame!");
                     app_ctxt.app_status = TEST_GENERATE_FRAME;
                 }
                 break;
             case TEST_COMPLETE_FAILURE:
-                printf("Test failure!");
+                //printf("Test failure!");
                 fail_test_context(&test_ctxt, "Error while taking the test.\n", current_timestamp);
                 app_ctxt.app_status = APP_IDLE;
                 break;
@@ -733,7 +733,7 @@ void IRAM_ATTR app_main()
     while(1){
 
         xSemaphoreTake(app_semaphore, WUR_DEFAULT_TIMEOUT/portTICK_PERIOD_MS);
-        ESP_LOGI(TAG, "Wake from APP semaphore, status %d!\n", app_ctxt.app_status);
+        //ESP_LOGI(TAG, "Wake from APP semaphore, status %d!\n", app_ctxt.app_status);
         xSemaphoreTakeRecursive(app_mutex, portMAX_DELAY);
         WuRAppTick();
         xSemaphoreGiveRecursive(app_mutex);
