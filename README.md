@@ -1,5 +1,7 @@
-# Hello World Example
+# WuR-CTC Demo ESP-32
 
-Starts a FreeRTOS task to print "Hello World"
+This code enables to test the WuR-CTC host on ESP-32. It requires a WuRx 
+as described [here](https://github.com/marticervia/WuR-CTC-WuRx).
 
-See the README.md file in the upper level 'examples' directory for more information about examples.
+This software was tested and developed using ESP-IDF v3.2.
+
